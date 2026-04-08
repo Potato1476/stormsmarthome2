@@ -27,10 +27,12 @@ services:
   storm-exporter:
     # Hình ảnh này giả định phục vụ việc export metric của Storm ra dạng Prometheus
     # Bạn có thể thay bằng Docker image của bạn nếu có
-    image: drewster727/storm-exporter:latest
+    image: mr4x2/stormexporter:v1.2.2
     container_name: storm-exporter
-    # Dùng find để tự dò tìm file nằm ở thư mục nào trong container và ép chạy
-    entrypoint: /bin/sh -c "find / -name storm-metrics-consumer.py 2>/dev/null | head -n 1 | xargs -I {} python3 {} 13.250.96.226:8080 8000 5"
+    environment:
+      - STORM_UI_HOST=13.250.96.226:8080
+      - PORT_EXPOSE=8000
+      - REFRESH_RATE=5
     ports:
       - "8000:8000" # Expose ra port cấu hình trong prometheus
     restart: unless-stopped
