@@ -27,7 +27,7 @@ services:
   storm-exporter:
     # Hình ảnh này giả định phục vụ việc export metric của Storm ra dạng Prometheus
     # Bạn có thể thay bằng Docker image của bạn nếu có
-    image: tczekajlo/storm-exporter:latest # Hoặc quay.io/vshn/storm-exporter:latest
+    image: tantrinh0812/storm-exporter:latest # Hoặc drewster727/storm-exporter:latest
     container_name: storm-exporter
     environment:
       - STORM_API_URL=http://13.250.96.226:8080 # Trỏ IP Public/Remote của máy Gateway đang chạy Nimbus
