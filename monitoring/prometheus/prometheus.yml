@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'storm-exporter'
+    static_configs:
+      - targets: ['storm-exporter:8000'] # Thay đổi port ở đây nếu exporter của bạn dùng port khác

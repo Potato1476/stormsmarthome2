@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - storm_network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    networks:
+      - storm_network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  storm-exporter:
+    # Hình ảnh này giả định phục vụ việc export metric của Storm ra dạng Prometheus
+    # Bạn có thể thay bằng Docker image của bạn nếu có
+    image: tczekajlo/storm-exporter:latest # Hoặc quay.io/vshn/storm-exporter:latest
+    container_name: storm-exporter
+    environment:
+      - STORM_API_URL=http://nimbus:8080 # Tên service của nimbus của bạn
+    ports:
+      - "8000:8000" # Expose ra port cấu hình trong prometheus
+    networks:
+      - storm_network
+    restart: unless-stopped
+
+networks:
+  storm_network:
+    external: true
