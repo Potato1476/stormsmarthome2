@@ -8,8 +8,6 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-    networks:
-      - storm_network
     restart: unless-stopped
 
   grafana:
@@ -22,8 +20,6 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
     ports:
       - "3000:3000"
-    networks:
-      - storm_network
     depends_on:
       - prometheus
     restart: unless-stopped
@@ -34,13 +30,7 @@ services:
     image: tczekajlo/storm-exporter:latest # Hoặc quay.io/vshn/storm-exporter:latest
     container_name: storm-exporter
     environment:
-      - STORM_API_URL=http://nimbus:8080 # Tên service của nimbus của bạn
+      - STORM_API_URL=http://13.250.96.226:8080 # Trỏ IP Public/Remote của máy Gateway đang chạy Nimbus
     ports:
       - "8000:8000" # Expose ra port cấu hình trong prometheus
-    networks:
-      - storm_network
     restart: unless-stopped
-
-networks:
-  storm_network:
-    external: true
