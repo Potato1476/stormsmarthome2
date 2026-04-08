@@ -27,8 +27,8 @@
       },
       "targets": [
         {
-          "expr": "topology_stats_complete_latency",
-          "legendFormat": "{{topology}} - Complete Latency",
+          "expr": "topology_stats_complete_latency{window=\"600\"}",
+          "legendFormat": "{{TopologyName}} (10m) - Latency",
           "refId": "A"
         }
       ],
@@ -40,7 +40,7 @@
     },
     {
       "id": 2,
-      "title": "Topology Messages Acked (Throughput)",
+      "title": "Topology Messages Acked/Sec (Throughput)",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -50,8 +50,8 @@
       },
       "targets": [
         {
-          "expr": "rate(topology_stats_acked[1m])",
-          "legendFormat": "{{topology}} - Acked/s",
+          "expr": "rate(topology_stats_acked{window=\":all-time\"}[1m])",
+          "legendFormat": "{{TopologyName}} - Acked/s",
           "refId": "A"
         }
       ],
@@ -84,8 +84,8 @@
       },
       "targets": [
         {
-          "expr": "bolts_process_latency",
-          "legendFormat": "{{bolt_id}} - Process Latency",
+          "expr": "bolts_process_latency{window=\"600\"}",
+          "legendFormat": "{{BoltId}} - Process Latency",
           "refId": "A"
         }
       ],
@@ -107,8 +107,8 @@
       },
       "targets": [
         {
-          "expr": "bolts_execute_latency",
-          "legendFormat": "{{bolt_id}} - Execute Latency",
+          "expr": "bolts_execute_latency{window=\"600\"}",
+          "legendFormat": "{{BoltId}} - Execute Latency",
           "refId": "A"
         }
       ],
@@ -130,8 +130,8 @@
       },
       "targets": [
         {
-          "expr": "bolts_capacity",
-          "legendFormat": "{{bolt_id}} - Capacity",
+          "expr": "bolts_capacity{window=\"600\"}",
+          "legendFormat": "{{BoltId}} - Capacity",
           "refId": "A"
         }
       ],
@@ -143,7 +143,7 @@
     },
     {
       "id": 6,
-      "title": "Spouts Emitted Rate",
+      "title": "Spouts Emitted/Sec",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -153,8 +153,8 @@
       },
       "targets": [
         {
-          "expr": "rate(spouts_emitted[1m])",
-          "legendFormat": "{{spout_id}} - Emitted/s",
+          "expr": "rate(spouts_emitted{window=\":all-time\"}[1m])",
+          "legendFormat": "{{SpoutId}} - Emitted/s",
           "refId": "A"
         }
       ],
