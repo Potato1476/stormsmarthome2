@@ -29,8 +29,7 @@ services:
     # Bạn có thể thay bằng Docker image của bạn nếu có
     image: tantrinh0812/storm-exporter:latest # Hoặc drewster727/storm-exporter:latest
     container_name: storm-exporter
-    environment:
-      - STORM_API_URL=http://13.250.96.226:8080 # Trỏ IP Public/Remote của máy Gateway đang chạy Nimbus
+    command: ["http://13.250.96.226:8080", "8000", "5"]
     ports:
       - "8000:8000" # Expose ra port cấu hình trong prometheus
     restart: unless-stopped
