@@ -29,8 +29,8 @@ services:
     # Bạn có thể thay bằng Docker image của bạn nếu có
     image: tantrinh0812/storm-exporter:latest # Hoặc drewster727/storm-exporter:latest
     container_name: storm-exporter
-    # Dùng thẳng entrypoint để ép đè lên file Dockerfile gốc
-    entrypoint: /bin/sh -c "python3 storm-metrics-consumer.py 13.250.96.226:8080 8000 5"
+    # Chạy trực tiếp tên phần mềm như một lệnh hệ thống
+    entrypoint: ["storm-metrics-consumer.py", "13.250.96.226:8080", "8000", "5"]
     ports:
       - "8000:8000" # Expose ra port cấu hình trong prometheus
     restart: unless-stopped
