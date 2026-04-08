@@ -27,10 +27,11 @@ services:
   storm-exporter:
     # Hình ảnh này giả định phục vụ việc export metric của Storm ra dạng Prometheus
     # Bạn có thể thay bằng Docker image của bạn nếu có
-    image: tantrinh0812/storm-exporter:latest # Hoặc drewster727/storm-exporter:latest
+    image: drewster727/storm-exporter:latest
     container_name: storm-exporter
-    # Chạy trực tiếp tên phần mềm như một lệnh hệ thống
-    entrypoint: ["storm-metrics-consumer.py", "13.250.96.226:8080", "8000", "5"]
+    # Truyền biến môi trường theo chuẩn của các exporter xịn
+    environment:
+      - STORM_API_URL=http://13.250.96.226:8080
     ports:
       - "8000:8000" # Expose ra port cấu hình trong prometheus
     restart: unless-stopped
