@@ -24,7 +24,7 @@ services:
       - 6627:6627
     restart: always
     extra_hosts:
-      - "mysql:10.0.41.102"
+      - "mysql:3.144.243.7"
     networks:
       storm_network:
     depends_on:
@@ -44,7 +44,7 @@ services:
     ports:
       - 6700-6703:6700-6703
     extra_hosts:
-      - "mysql:10.0.41.102"
+      - "mysql:3.144.243.7"
       - "supervisor2:10.0.41.102"
     networks:
       storm_network:

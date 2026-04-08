@@ -11,10 +11,10 @@ services:
     networks:
       storm_network:
     extra_hosts:
-      - "zookeeper:10.0.41.101"
-      - "nimbus:10.0.41.101"
-      - "mqtt-broker:10.0.41.101"
-      - "supervisor1:10.0.41.101"
+      - "zookeeper:13.250.96.226"
+      - "nimbus:13.250.96.226"
+      - "mqtt-broker:13.250.96.226"
+      - "supervisor1:13.250.96.226"
 
   mysql:
     image: mysql:8.4.2
@@ -52,7 +52,7 @@ services:
         condition: service_healthy
     restart: always
     extra_hosts:
-      - "mqtt-broker:10.0.41.101"
+      - "mqtt-broker:13.250.96.226"
       
 networks:
   storm_network:
