@@ -60,7 +60,7 @@ public class Bolt_split extends BaseRichBolt {
                 String day = String.format("%02d", date.getDate()) ;
                 Long time = (date.getTime()%86400000);
                 int sliceIndex = (int) Math.floorDiv(time,(window*60000));
-                _collector.emit("data", tuple, new Values(houseId, householdId, plugId, year, month, day, sliceIndex, value));
+                _collector.emit("data", new Values(houseId, householdId, plugId, year, month, day, sliceIndex, value));
                 _collector.ack(tuple);
             }
             else{
