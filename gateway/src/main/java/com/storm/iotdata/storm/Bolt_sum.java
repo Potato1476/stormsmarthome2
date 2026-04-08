@@ -119,7 +119,7 @@ public class Bolt_sum extends BaseRichBolt {
                         finalHouseDataSize++;
                         HouseData houseData = tempFinalHouseData.get(timeslice);
                         if(!houseData.isSaved()){
-                            _collector.emit("data", new Values(houseData.getClass(), houseData));
+                            _collector.emit("data", tuple, new Values(houseData.getClass(), houseData));
                             houseDataNeedSave.push(houseData);
                         }
                         else if((System.currentTimeMillis()-houseData.getLastUpdate())>(cleanTrigger*gap*1000)){
@@ -134,7 +134,7 @@ public class Bolt_sum extends BaseRichBolt {
                         finalHouseholdDataSize++;
                         HouseholdData householdData = tempFinalHouseholdData.get(timeslice);
                         if(!householdData.isSaved()){
-                            _collector.emit("data", new Values(householdData.getClass(), householdData));
+                            _collector.emit("data", tuple, new Values(householdData.getClass(), householdData));
                             householdDataNeedSave.push(householdData);
                         }
                         else if((System.currentTimeMillis()-householdData.getLastUpdate())>(cleanTrigger*gap*1000)){
@@ -303,7 +303,7 @@ public class Bolt_sum extends BaseRichBolt {
                 for(HouseholdData householdData : householdDataNeedClean) {
                     finalHouseholdDataList.get(householdData.getHouseholdUniqueId()).remove(householdData.getSliceId());
                 }
-                _collector.emit("trigger", new Values(triggerInterval, spoutProp));
+                _collector.emit("trigger", tuple, new Values(triggerInterval, spoutProp));
                 _collector.ack(tuple);
             }
             else if(tuple.getSourceStreamId().equals("data") && tuple.getValueByField("type").equals(DeviceData.class)){
