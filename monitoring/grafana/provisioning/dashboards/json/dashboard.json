@@ -84,7 +84,7 @@
       },
       "targets": [
         {
-          "expr": "bolts_process_latency{window=\"600\"}",
+          "expr": "bolts_process_latency",
           "legendFormat": "{{BoltId}} - Process Latency",
           "refId": "A"
         }
@@ -107,7 +107,7 @@
       },
       "targets": [
         {
-          "expr": "bolts_execute_latency{window=\"600\"}",
+          "expr": "bolts_execute_latency",
           "legendFormat": "{{BoltId}} - Execute Latency",
           "refId": "A"
         }
@@ -130,7 +130,7 @@
       },
       "targets": [
         {
-          "expr": "bolts_capacity{window=\"600\"}",
+          "expr": "bolts_capacity",
           "legendFormat": "{{BoltId}} - Capacity",
           "refId": "A"
         }
@@ -153,7 +153,7 @@
       },
       "targets": [
         {
-          "expr": "rate(spouts_emitted{window=\":all-time\"}[1m])",
+          "expr": "rate(spouts_emitted[1m])",
           "legendFormat": "{{SpoutId}} - Emitted/s",
           "refId": "A"
         }
