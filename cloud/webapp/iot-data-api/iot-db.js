@@ -31,11 +31,11 @@ function initCon(){
         console.log(e);
     }
     con = mysql.createConnection({
-        host: cred.db_url,
-        port: cred.db_port||3306,
-        user: cred.db_user,
-        password: cred.db_pass,
-        database: cred.db_name
+        host:     process.env.DB_HOST     || cred.db_url,
+        port:     process.env.DB_PORT     || cred.db_port || 3306,
+        user:     process.env.DB_USER     || cred.db_user,
+        password: process.env.DB_PASS     || cred.db_pass,
+        database: process.env.DB_NAME     || cred.db_name
     });
     
     con.connect(async function(err) {
@@ -66,95 +66,65 @@ function initCon(){
     });
 }
 try{
+    // ── house-level query (fog_house_data) ─────────────────────────────────────
     function query(iot_data, callback) {
         if(iot_data.household_id==="*" || !iot_data.household_id){
-            let sql = `SELECT * FROM house_data WHERE `;
-            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`house_id=${iot_data.house_id} AND `;
-            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`year=${iot_data.year} AND `;
-            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`month=${iot_data.month} AND `;
-            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`day=${iot_data.day} AND `;
-            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`slice_gap=${iot_data.slice_gap} AND `;
-            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
-            con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
-                if (err) {
-                    console.log(err);
-                    setTimeout(()=>{
-                        console.log("Retrying");
-                        initCon();
-                    },5000)
-                }
-                else if(result){
-                    var house_datas = {};
-                    result.forEach((ele,i,arr) => {
-                        let temp = new house_data(ele.house_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
-                        house_datas[temp.getUniqueID()] = temp;
-                    });
-                    callback(err, house_datas);
-                }
-                else{
-                    callback(err, {});
-                }
+            let sql = `SELECT houseId as house_id, year, month, day, sliceIndex as slice_index, sliceGap as slice_gap, IF(count>0, sumValue/count, 0) as avg FROM fog_house_data WHERE 1=1 `;
+            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`AND houseId=${iot_data.house_id} `;
+            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`AND year='${iot_data.year}' `;
+            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`AND month='${iot_data.month}' `;
+            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`AND day='${iot_data.day}' `;
+            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`AND sliceGap=${iot_data.slice_gap} `;
+            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`AND sliceIndex=${iot_data.slice_index} `;
+            con.query(sql, function (err, result, fields) {
+                if (err) { console.log(err); return callback(err, {}); }
+                var house_datas = {};
+                if(result) result.forEach((ele) => {
+                    let temp = new house_data(ele.house_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
+                    house_datas[temp.getUniqueID()] = temp;
+                });
+                callback(null, house_datas);
             });
         }
+        // ── household-level query (fog_household_data) ─────────────────────────
         else if(iot_data.device_id==="*" || !iot_data.device_id){
-            let sql = `SELECT * FROM household_data WHERE `;
-            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`house_id=${iot_data.house_id} AND `;
-            if(iot_data.household_id!=undefined && iot_data.household_id!=null) sql+=`household_id=${iot_data.household_id} AND `;
-            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`year=${iot_data.year} AND `;
-            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`month=${iot_data.month} AND `;
-            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`day=${iot_data.day} AND `;
-            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`slice_gap=${iot_data.slice_gap} AND `;
-            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
-            con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
-                if (err) {
-                    console.log(err);
-                    setTimeout(()=>{
-                        console.log("Retrying");
-                        initCon();
-                    },5000)
-                }
-                else if(result){
-                    var house_datas = {};
-                    result.forEach((ele,i,arr) => {
-                        let temp = new house_data(ele.house_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
-                        house_datas[temp.getUniqueID()] = temp;
-                    });
-                    callback(err, house_datas);
-                }
-                else{
-                    callback(err, {});
-                }
+            let sql = `SELECT houseId as house_id, householdId as household_id, year, month, day, sliceIndex as slice_index, sliceGap as slice_gap, IF(count>0, sumValue/count, 0) as avg FROM fog_household_data WHERE 1=1 `;
+            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`AND houseId=${iot_data.house_id} `;
+            if(iot_data.household_id!=undefined && iot_data.household_id!=null) sql+=`AND householdId=${iot_data.household_id} `;
+            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`AND year='${iot_data.year}' `;
+            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`AND month='${iot_data.month}' `;
+            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`AND day='${iot_data.day}' `;
+            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`AND sliceGap=${iot_data.slice_gap} `;
+            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`AND sliceIndex=${iot_data.slice_index} `;
+            con.query(sql, function (err, result, fields) {
+                if (err) { console.log(err); return callback(err, {}); }
+                var household_datas = {};
+                if(result) result.forEach((ele) => {
+                    let temp = new household_data(ele.house_id, ele.household_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
+                    household_datas[temp.getUniqueID()] = temp;
+                });
+                callback(null, household_datas);
             });
         }
+        // ── device-level query (fog_device_data) ───────────────────────────────
         else {
-            let sql = `SELECT * FROM device_data WHERE `;
-            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`house_id=${iot_data.house_id} AND `;
-            if(iot_data.household_id!=undefined && iot_data.household_id!=null) sql+=`household_id=${iot_data.household_id} AND `;
-            if(iot_data.device_id!=undefined && iot_data.device_id!=null) sql+=`device_id=${iot_data.device_id} AND `;
-            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`year=${iot_data.year} AND `;
-            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`month=${iot_data.month} AND `;
-            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`day=${iot_data.day} AND `;
-            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`slice_gap=${iot_data.slice_gap} AND `;
-            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
-            con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
-                if (err) {
-                    console.log(err);
-                    setTimeout(()=>{
-                        console.log("Retrying");
-                        initCon();
-                    },5000)
-                }
-                else if(result){
-                    var house_datas = {};
-                    result.forEach((ele,i,arr) => {
-                        let temp = new house_data(ele.house_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
-                        house_datas[temp.getUniqueID()] = temp;
-                    });
-                    callback(err, house_datas);
-                }
-                else{
-                    callback(err, {});
-                }
+            let sql = `SELECT houseId as house_id, householdId as household_id, deviceId as device_id, year, month, day, sliceIndex as slice_index, sliceGap as slice_gap, IF(count>0, sumValue/count, 0) as avg FROM fog_device_data WHERE 1=1 `;
+            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`AND houseId=${iot_data.house_id} `;
+            if(iot_data.household_id!=undefined && iot_data.household_id!=null) sql+=`AND householdId=${iot_data.household_id} `;
+            if(iot_data.device_id!=undefined && iot_data.device_id!=null) sql+=`AND deviceId=${iot_data.device_id} `;
+            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`AND year='${iot_data.year}' `;
+            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`AND month='${iot_data.month}' `;
+            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`AND day='${iot_data.day}' `;
+            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`AND sliceGap=${iot_data.slice_gap} `;
+            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`AND sliceIndex=${iot_data.slice_index} `;
+            con.query(sql, function (err, result, fields) {
+                if (err) { console.log(err); return callback(err, {}); }
+                var device_datas = {};
+                if(result) result.forEach((ele) => {
+                    let temp = new device_data(ele.house_id, ele.household_id, ele.device_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
+                    device_datas[temp.getUniqueID()] = temp;
+                });
+                callback(null, device_datas);
             });
         }
     }
@@ -188,11 +158,8 @@ try{
             if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
             con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
                 if (err) {
-                    console.log(err);
-                    setTimeout(()=>{
-                        console.log("Retrying");
-                        initCon();
-                    },5000)
+                    console.log('[queryforecast] house:', err.message || err);
+                    return callback(err, null);
                 }
                 if(result){
                     var house_datas = {};
@@ -200,10 +167,10 @@ try{
                         let temp = new house_data(ele.house_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
                         house_datas[temp.getUniqueID()] = temp;
                     });
-                    callback(err, house_datas);
+                    callback(null, house_datas);
                 }
                 else {
-                    callback(err, null);
+                    callback(null, null);
                 }
             });
         }
@@ -218,11 +185,8 @@ try{
             if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
             con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
                 if (err) {
-                    console.log(err);
-                    setTimeout(()=>{
-                        console.log("Retrying");
-                        initCon();
-                    },5000)
+                    console.log('[queryforecast] household:', err.message || err);
+                    return callback(err, null);
                 }
                 if(result){
                     var household_datas = {};
@@ -230,10 +194,10 @@ try{
                         let temp = new household_data(ele.house_id, ele.household_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
                         household_datas[temp.getUniqueID()] = temp;
                     });
-                    callback(err, household_datas);
+                    callback(null, household_datas);
                 }
                 else {
-                    callback(err, null);
+                    callback(null, null);
                 }
             });
         }
@@ -249,22 +213,19 @@ try{
             if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
             con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
                 if (err) {
-                    console.log(err);
-                    setTimeout(()=>{
-                        console.log("Retrying");
-                        initCon();
-                    },5000)
+                    console.log('[queryforecast] device:', err.message || err);
+                    return callback(err, {});
                 }
-                else if(result){
+                if(result){
                     var device_datas = {};
                     result.forEach((ele,i,arr) => {
                         let temp = new device_data(ele.house_id, ele.household_id, ele.device_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
                         device_datas[temp.getUniqueID()] = temp;
                     });
-                    callback(err, device_datas);
+                    callback(null, device_datas);
                 }
                 else{
-                    callback(err, {});
+                    callback(null, {});
                 }
             });
         }
@@ -502,16 +463,16 @@ function recalculateMSE(){
 async function initMeta(){
     return new Promise((resolve,reject)=>{
         let con_alt = mysql.createConnection({
-            host: cred.db_url,
-            port: cred.db_port||3306,
-            user: cred.db_user,
-            password: cred.db_pass,
-            database: cred.db_name
+            host:     process.env.DB_HOST     || cred.db_url,
+            port:     process.env.DB_PORT     || cred.db_port || 3306,
+            user:     process.env.DB_USER     || cred.db_user,
+            password: process.env.DB_PASS     || cred.db_pass,
+            database: process.env.DB_NAME     || cred.db_name
         });
         
         con_alt.connect(async function(err) {
             if (!err) {
-                let sql = `select distinct slice_gap from house_data order by slice_gap asc`;
+                let sql = `select distinct sliceGap as slice_gap from fog_house_data order by slice_gap asc`;
                 con_alt.query(sql, (err,result)=>{
                     if(err || result == null) {
                         console.log(err);
@@ -529,7 +490,7 @@ async function initMeta(){
                         result.forEach(ele=>{
                             meta_data.result.slice_gap.push(ele.slice_gap);
                         })
-                        let sql = `select distinct house_id, year, month, day, concat(year, '/', month, '/', day) as date_text from house_data order by date_text asc`;
+                        let sql = `select distinct houseId as house_id, year, month, day, concat(year, '/', month, '/', day) as date_text from fog_house_data order by date_text asc`;
                         con_alt.query(sql, (err,result)=>{
                             if(err || result == null) {
                                 console.log(err);
@@ -556,7 +517,7 @@ async function initMeta(){
                                         text: ele.date_text
                                     })
                                 })
-                                let sql = `select distinct house_id, household_id, year, month, day, concat(year, '/', month, '/', day) as date_text from household_data order by date_text asc`;
+                                let sql = `select distinct houseId as house_id, householdId as household_id, year, month, day, concat(year, '/', month, '/', day) as date_text from fog_household_data order by date_text asc`;
                                 con_alt.query(sql, (err,result)=>{
                                     if(err || result == null) {
                                         console.log(err);
@@ -585,7 +546,7 @@ async function initMeta(){
                                                 text: ele.date_text
                                             })
                                         })
-                                        let sql = `select distinct house_id, household_id, device_id, year, month, day, concat(year, '/', month, '/', day) as date_text from device_data order by date_text asc`;
+                                        let sql = `select distinct houseId as house_id, householdId as household_id, deviceId as device_id, year, month, day, concat(year, '/', month, '/', day) as date_text from fog_device_data order by date_text asc`;
                                         con_alt.query(sql, (err,result)=>{
                                             if(err || result == null) {
                                                 console.log(err);

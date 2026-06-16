@@ -1,196 +1,1001 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
-        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
-        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
-        crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
-        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
-        crossorigin="anonymous"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
-        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
-        crossorigin="anonymous"></script>
-    <title>IOT_Data</title>
-    <!-- <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css"> -->
-    <link rel="stylesheet" href="./static/notifications.css">
-    <link rel="stylesheet" href="./static/style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <!-- <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script> -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.0/socket.io.js"></script>
-    <script src="./static/notifications.js"></script>
-    <script src="./static/iot_main.js"></script>
-    <script src="./static/notification_main.js"></script>
+    <title>StormSmartHome — IoT Energy Dashboard</title>
+    <meta name="description" content="Real-time smart home energy monitoring powered by Apache Storm Fog Computing">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-void:      #050508;
+            --bg-surface:   #0c0c14;
+            --bg-card:      #10101c;
+            --bg-card-alt:  #13131f;
+            --border-soft:  rgba(255,255,255,0.06);
+            --border-glow:  rgba(139,92,246,0.25);
+            --accent-violet:#8b5cf6;
+            --accent-cyan:  #06b6d4;
+            --accent-emerald:#10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose:  #f43f5e;
+            --text-primary: #f0f0ff;
+            --text-secondary:#a0a0c0;
+            --text-muted:   #5a5a7a;
+            --glow-violet:  rgba(139,92,246,0.15);
+            --glow-cyan:    rgba(6,182,212,0.12);
+            --glow-emerald: rgba(16,185,129,0.12);
+            --radius-card:  20px;
+            --radius-inner: 14px;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            min-height: 100dvh;
+            overflow-x: hidden;
+        }
+
+        /* ── Mesh Gradient Background ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background:
+                radial-gradient(ellipse 80% 50% at 15% 20%, rgba(139,92,246,0.08) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 85% 70%, rgba(6,182,212,0.07) 0%, transparent 55%),
+                radial-gradient(ellipse 50% 60% at 50% 100%, rgba(16,185,129,0.05) 0%, transparent 50%);
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            position: fixed; left: 0; top: 0; bottom: 0; width: 220px;
+            background: rgba(10,10,20,0.85);
+            backdrop-filter: blur(24px);
+            border-right: 1px solid var(--border-soft);
+            z-index: 100;
+            display: flex; flex-direction: column; padding: 28px 16px;
+            gap: 4px;
+        }
+
+        .sidebar-logo {
+            display: flex; align-items: center; gap: 10px;
+            padding: 0 8px; margin-bottom: 28px;
+        }
+        .logo-icon {
+            width: 36px; height: 36px; border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent-violet), var(--accent-cyan));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; flex-shrink: 0;
+        }
+        .logo-text { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
+        .logo-sub  { font-size: 10px; color: var(--text-muted); font-weight: 400; }
+
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            color: var(--text-secondary); font-size: 13px; font-weight: 500;
+            cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+            border: 1px solid transparent; text-decoration: none;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+        .nav-item.active {
+            background: rgba(139,92,246,0.12);
+            color: var(--accent-violet);
+            border-color: rgba(139,92,246,0.2);
+        }
+        .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+        .sidebar-section-label {
+            font-size: 10px; font-weight: 600; letter-spacing: 1px;
+            color: var(--text-muted); text-transform: uppercase;
+            padding: 16px 12px 6px;
+        }
+
+        .slack-status {
+            margin-top: auto; padding: 12px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px; border: 1px solid var(--border-soft);
+        }
+        .slack-status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .slack-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+        }
+        .slack-badge.on  { background: rgba(16,185,129,0.15); color: var(--accent-emerald); border: 1px solid rgba(16,185,129,0.3); }
+        .slack-badge.off { background: rgba(244,63,94,0.12); color: var(--accent-rose); border: 1px solid rgba(244,63,94,0.25); }
+        .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse-dot 2s infinite; }
+        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .btn-test-slack {
+            width: 100%; padding: 7px; border-radius: 8px; font-size: 11px; font-weight: 600;
+            background: rgba(139,92,246,0.15); color: var(--accent-violet);
+            border: 1px solid rgba(139,92,246,0.25); cursor: pointer;
+            transition: all 0.2s; font-family: inherit;
+        }
+        .btn-test-slack:hover { background: rgba(139,92,246,0.25); }
+
+        /* ── Main Content ── */
+        .main {
+            margin-left: 220px; padding: 28px 32px;
+            position: relative; z-index: 1;
+        }
+
+        /* ── Top Bar ── */
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 28px;
+        }
+        .page-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.5px; }
+        .page-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+        .filters {
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+        }
+        .select-wrap {
+            position: relative;
+        }
+        .select-wrap select {
+            appearance: none;
+            background: var(--bg-card); color: var(--text-primary);
+            border: 1px solid var(--border-soft);
+            padding: 8px 32px 8px 12px; border-radius: 10px;
+            font-size: 12px; font-family: inherit; font-weight: 500;
+            cursor: pointer; transition: border-color 0.2s; outline: none; min-width: 120px;
+        }
+        .select-wrap select:focus { border-color: rgba(139,92,246,0.5); }
+        .select-wrap::after {
+            content: '▾'; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            font-size: 10px; color: var(--text-muted); pointer-events: none;
+        }
+
+        /* ── Bento Grid ── */
+        .bento {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-auto-rows: 90px;
+            gap: 16px;
+        }
+
+        /* ── Card Base ── */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-card);
+            padding: 20px;
+            position: relative; overflow: hidden;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+        .card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-1px); }
+        .card::before {
+            content: ''; position: absolute; inset: 0; border-radius: inherit;
+            background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        /* ── KPI Cards (col-span-3, row-span-2) ── */
+        .kpi-card { grid-column: span 3; grid-row: span 2; }
+        .kpi-icon {
+            width: 40px; height: 40px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; margin-bottom: 14px;
+        }
+        .kpi-icon.violet { background: var(--glow-violet); }
+        .kpi-icon.cyan   { background: var(--glow-cyan); }
+        .kpi-icon.emerald{ background: var(--glow-emerald); }
+        .kpi-icon.amber  { background: rgba(245,158,11,0.12); }
+        .kpi-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 32px; font-weight: 700; letter-spacing: -1px; line-height: 1;
+        }
+        .kpi-label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 5px; }
+        .kpi-trend { font-size: 11px; font-weight: 600; margin-top: 10px; }
+        .kpi-trend.up   { color: var(--accent-rose); }
+        .kpi-trend.down { color: var(--accent-emerald); }
+        .kpi-glow {
+            position: absolute; bottom: -20px; right: -20px;
+            width: 100px; height: 100px; border-radius: 50%;
+            opacity: 0.12; filter: blur(30px);
+        }
+
+        /* ── Main Chart (col-span-8, row-span-5) ── */
+        .chart-main { grid-column: span 8; grid-row: span 5; }
+        .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+        .chart-title { font-weight: 700; font-size: 15px; }
+        .chart-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .chart-canvas-wrap { position: relative; height: calc(100% - 56px); }
+        canvas { width: 100% !important; height: 100% !important; }
+
+        /* ── Notification Panel (col-span-4, row-span-5) ── */
+        .noti-panel { grid-column: span 4; grid-row: span 5; }
+        .noti-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+        .noti-tab {
+            padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+            background: transparent; color: var(--text-muted); font-family: inherit;
+        }
+        .noti-tab.active {
+            background: rgba(139,92,246,0.15); color: var(--accent-violet);
+            border-color: rgba(139,92,246,0.25);
+        }
+        .noti-list {
+            display: flex; flex-direction: column; gap: 8px;
+            overflow-y: auto; height: calc(100% - 80px);
+            padding-right: 4px;
+        }
+        .noti-list::-webkit-scrollbar { width: 3px; }
+        .noti-list::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 2px; }
+        .noti-item {
+            padding: 12px; border-radius: 12px;
+            border-left: 3px solid;
+            background: rgba(255,255,255,0.03);
+            animation: slideIn 0.3s cubic-bezier(0.4,0,0.2,1);
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+        .noti-item.critical { border-color: var(--accent-rose); background: rgba(244,63,94,0.06); }
+        .noti-item.warning  { border-color: var(--accent-amber); background: rgba(245,158,11,0.06); }
+        .noti-item.info     { border-color: var(--accent-cyan); background: rgba(6,182,212,0.06); }
+        .noti-title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+        .noti-desc  { font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
+        .noti-time  { font-size: 10px; color: var(--text-muted); margin-top: 5px; }
+        .noti-slack { font-size: 10px; color: var(--accent-violet); margin-top: 2px; }
+
+        /* ── Storm Log (col-span-8, row-span-3) ── */
+        .log-card { grid-column: span 8; grid-row: span 3; }
+        .log-box {
+            background: rgba(0,0,0,0.4); border-radius: 10px;
+            padding: 12px; height: calc(100% - 44px);
+            overflow-y: auto; font-family: 'Space Grotesk', monospace;
+            font-size: 11px; color: var(--text-secondary); line-height: 1.7;
+        }
+        .log-box::-webkit-scrollbar { width: 3px; }
+        .log-box::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 2px; }
+        .log-line { margin-bottom: 2px; }
+        .log-line .key { color: var(--accent-violet); }
+        .log-line .val { color: var(--accent-cyan); }
+        .log-line .warn { color: var(--accent-amber); }
+
+        /* ── Spout Status (col-span-4, row-span-3) ── */
+        .spout-card { grid-column: span 4; grid-row: span 3; }
+        .spout-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-top: 12px; }
+        .spout-metric {
+            background: rgba(255,255,255,0.03); border-radius: 10px; padding: 10px 12px;
+            border: 1px solid var(--border-soft);
+        }
+        .spout-metric-val { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; }
+        .spout-metric-key { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; margin-top: 2px; }
+
+        /* ── Slack Config Card ── */
+        .slack-card { grid-column: span 12; grid-row: span 2; }
+        .slack-card-inner { display: flex; align-items: center; gap: 20px; height: 100%; }
+        .slack-logo { font-size: 36px; flex-shrink: 0; }
+        .slack-info { flex: 1; }
+        .slack-title { font-weight: 700; font-size: 15px; margin-bottom: 3px; }
+        .slack-desc { font-size: 12px; color: var(--text-secondary); }
+        .slack-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+        .slack-webhook-input {
+            background: rgba(0,0,0,0.4); border: 1px solid var(--border-soft);
+            border-radius: 8px; padding: 8px 12px; color: var(--text-primary);
+            font-size: 12px; font-family: inherit; width: 340px; outline: none;
+            transition: border-color 0.2s;
+        }
+        .slack-webhook-input:focus { border-color: rgba(139,92,246,0.5); }
+        .btn {
+            padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; font-family: inherit; border: none;
+        }
+        .btn-primary { background: var(--accent-violet); color: white; }
+        .btn-primary:hover { background: #7c3aed; transform: translateY(-1px); }
+        .btn-secondary { background: rgba(255,255,255,0.07); color: var(--text-primary); border: 1px solid var(--border-soft); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+        .btn-danger { background: rgba(244,63,94,0.15); color: var(--accent-rose); border: 1px solid rgba(244,63,94,0.25); }
+        .btn-danger:hover { background: rgba(244,63,94,0.25); }
+
+        /* ── Loading ── */
+        .loading {
+            display: flex; align-items: center; justify-content: center;
+            height: 100%; gap: 8px; color: var(--text-muted); font-size: 13px;
+        }
+        .spinner {
+            width: 16px; height: 16px; border-radius: 50%;
+            border: 2px solid var(--border-soft);
+            border-top-color: var(--accent-violet);
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Toast ── */
+        #toast-container {
+            position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .toast {
+            padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 500;
+            backdrop-filter: blur(20px); border: 1px solid;
+            animation: toastIn 0.3s cubic-bezier(0.4,0,0.2,1);
+            max-width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        @keyframes toastIn { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
+        .toast.success { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: var(--accent-emerald); }
+        .toast.error   { background: rgba(244,63,94,0.15);  border-color: rgba(244,63,94,0.3);  color: var(--accent-rose); }
+        .toast.info    { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.3); color: var(--accent-violet); }
+
+        /* ── Empty State ── */
+        .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); gap: 8px; }
+        .empty-icon { font-size: 32px; opacity: 0.4; }
+        .empty-text { font-size: 12px; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; padding: 16px; }
+            .bento { grid-template-columns: 1fr; grid-auto-rows: auto; gap: 12px; }
+            .kpi-card, .chart-main, .noti-panel, .log-card, .spout-card, .slack-card { grid-column: span 1; grid-row: span 1; }
+            .chart-main { min-height: 300px; }
+            .noti-panel { min-height: 280px; }
+            .log-card   { min-height: 200px; }
+            .slack-card-inner { flex-direction: column; align-items: flex-start; }
+            .slack-webhook-input { width: 100%; }
+            .slack-actions { flex-direction: column; width: 100%; }
+        }
+    </style>
 </head>
-
 <body>
-    <div class="form-row" style="z-index: 100; background-color: white; position: fixed; width: 100%; height: 12vh;">
-        <div class="form-group col-md">
-            <label for="house">Choose a house:</label>
-            <select id="house" class="form-control">
-            </select>
-        </div>
-        <div class="form-group col-md">
-            <label for="household">Choose a household:</label>
-            <select id="household" class="form-control">
-            </select>
-        </div>
-        <div class="form-group col-md">
-            <label for="device">Choose a device:</label>
-            <select id="device" class="form-control">
-            </select>
-        </div>
-        <div class="form-group col-md">
-            <label for="slice_gap">Choose a window size:</label>
-            <select id="slice_gap" class="form-control">
-            </select>
-        </div>
-        <div class="form-group col-md">
-            <label for="version">Time:</label>
-            <select id="day" class="form-control">
-                <option value="*">All month</option>
-            </select>
-        </div>
-        <div class="form-group col-md">
-            <label for="version">Forecast:</label>
-            <select id="version" class="form-control">
-                <option value="">No forecast</option>
-            </select>
-        </div>
-        <div class="form-group col-xl-4">
-            <label>
-                Spout info: 
-                <label id="spout-state"></label>
-                | Update:
-                <label id="spout-last-update"></label>
-            </label>
-            <div class="row">
-                <div class="col">
-                    Speed
-                    <br>
-                    <label id="spout-receive-speed">N/A</label>
-                </div>
-                <div class="col">
-                    Load speed
-                    <br>
-                    <label id="spout-load-speed">N/A</label>
-                </div>
-                <div class="col">
-                    Total
-                    <br>
-                    <label id="spout-receive-total">N/A</label>
-                </div>
-                <div class="col">
-                    Queue
-                    <br>
-                    <label id="spout-queue">N/A</label>
-                </div>
-                <div class="col">
-                    Success
-                    <br>
-                    <label id="spout-success">N/A</label>
-                </div>
-                <div class="col">
-                    Fail
-                    <br>
-                    <label id="spout-fail">N/A</label>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="form-row" style="padding-top: 12vh">
-        <div class="form-group col-md-9">
-            <div class="chart-container" style="position: fixed; width: 70%;">
-                <canvas id="IOT"></canvas>
-                <div id="loader">
-                    <div class="loader">
-                        <svg viewBox="0 0 80 80">
-                            <circle id="test" cx="40" cy="40" r="32"></circle>
-                        </svg>
-                    </div>
-                    
-                    <div class="loader triangle">
-                        <svg viewBox="0 0 86 80">
-                            <polygon points="43 8 79 72 7 72"></polygon>
-                        </svg>
-                    </div>
-                    
-                    <div class="loader">
-                        <svg viewBox="0 0 80 80">
-                            <rect x="8" y="8" width="64" height="64"></rect>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="form-group col-md-3">
-            <font color="#f66" style="font-size:18px">
-                Count : <label id='datapoint'></label>
-                <br>
-                Mean : <label id='mean'></label>
-                <br>
-                Variance : <label id='variance'></label>
-                <br>
-                SD : <label id='sd'></label>
-                <br>
-                MSE : <label id='mse'></label>
-            </font>
-            <br>
-            <button type="button" id="image" class="btn btn-danger" onclick="Data2PNG()">Image export</button>
-            <button type="button" id="csv" class="btn btn-danger" onclick="Data2CSV()">CSV export</button>
-            <br>
-            <br>
-            <span style="font-size: x-large;">Notifications</span>
 
-            <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
-                <li class="nav-item">
-                    <a class="nav-link active" id="device-notification-tab" data-toggle="pill"
-                        href="#device-notification" role="tab" aria-controls="device-notification"
-                        aria-selected="true">Device</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" id="household-notification-tab" data-toggle="pill"
-                        href="#household-notification" role="tab" aria-controls="household-notification"
-                        aria-selected="false">Household</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" id="house-notification-tab" data-toggle="pill" href="#house-notification"
-                        role="tab" aria-controls="house-notification" aria-selected="false">House</a>
-                </li>
-            </ul>
-            <div class="tab-content" id="pills-tabContent">
-                <div class="tab-pane fade show active" id="device-notification" role="tabpanel"
-                    aria-labelledby="device-notification-tab">
-                    <div class="list-group" id="device_notification_list" style="height: 80%;">
-                    </div>
-                    <div id="more_device_notification" class="more_notification">
-                        Load more
-                    </div>
-                </div>
-                <div class="tab-pane fade" id="household-notification" role="tabpanel"
-                    aria-labelledby="household-notification-tab">
-                    <div class="list-group" id="household_notification_list" style="height: 80%;">
-                    </div>
-                    <div id="more_household_notification" class="more_notification">
-                        Load more
-                    </div>
-                </div>
-                <div class="tab-pane fade" id="house-notification" role="tabpanel"
-                    aria-labelledby="house-notification-tab">
-                    <div class="list-group" id="house_notification_list" style="height: 80%;">
-                    </div>
-                    <div id="more_house_notification" class="more_notification">
-                        Load more
-                    </div>
-                </div>
+<!-- ── Sidebar ── -->
+<nav class="sidebar">
+    <div class="sidebar-logo">
+        <div class="logo-icon">⚡</div>
+        <div>
+            <div class="logo-text">StormHome</div>
+            <div class="logo-sub">Fog Computing IoT</div>
+        </div>
+    </div>
+
+    <div class="sidebar-section-label">Monitor</div>
+    <a class="nav-item active" onclick="setView('dashboard')">
+        <span class="nav-icon">📊</span> Dashboard
+    </a>
+    <a class="nav-item" onclick="setView('chart')">
+        <span class="nav-icon">📈</span> Energy Charts
+    </a>
+    <a class="nav-item" onclick="setView('alerts')">
+        <span class="nav-icon">🔔</span> Alerts
+    </a>
+
+    <div class="sidebar-section-label">System</div>
+    <a class="nav-item" href="http://localhost:8080" target="_blank">
+        <span class="nav-icon">⚙️</span> Storm UI
+    </a>
+    <a class="nav-item" href="http://localhost:3000" target="_blank">
+        <span class="nav-icon">📉</span> Grafana
+    </a>
+
+    <!-- Slack Quick Status -->
+    <div class="slack-status">
+        <div class="slack-status-row">
+            <span style="font-size:16px">💬</span>
+            <span style="font-size:12px; font-weight:600;">Slack Alerts</span>
+        </div>
+        <span id="sidebar-slack-badge" class="slack-badge off">
+            <span class="dot"></span> Loading...
+        </span>
+        <br><br>
+        <button class="btn-test-slack" onclick="testSlack()">🧪 Send Test Alert</button>
+    </div>
+</nav>
+
+<!-- ── Toast Container ── -->
+<div id="toast-container"></div>
+
+<!-- ── Main ── -->
+<main class="main">
+    <!-- Top Bar -->
+    <div class="topbar">
+        <div>
+            <div class="page-title">Energy Dashboard</div>
+            <div class="page-sub" id="last-update">Connecting to Storm gateway...</div>
+        </div>
+        <div class="filters">
+            <div class="select-wrap">
+                <select id="house" onchange="onHouseChange()">
+                    <option value="">— House —</option>
+                </select>
+            </div>
+            <div class="select-wrap">
+                <select id="household" onchange="onHouseholdChange()">
+                    <option value="*">All Households</option>
+                </select>
+            </div>
+            <div class="select-wrap">
+                <select id="device">
+                    <option value="*">All Devices</option>
+                </select>
+            </div>
+            <div class="select-wrap">
+                <select id="slice_gap" onchange="loadChart()">
+                    <option value="1">Window: 1 min</option>
+                    <option value="5" selected>Window: 5 min</option>
+                    <option value="15">Window: 15 min</option>
+                    <option value="30">Window: 30 min</option>
+                    <option value="60">Window: 1 h</option>
+                </select>
+            </div>
+            <div class="select-wrap">
+                <select id="day" onchange="loadChart()">
+                    <option value="*">All Days</option>
+                </select>
             </div>
         </div>
     </div>
+
+    <!-- ── Bento Grid ── -->
+    <div class="bento">
+
+        <!-- KPI 1: Live Power -->
+        <div class="card kpi-card" id="kpi-power">
+            <div class="kpi-icon violet">⚡</div>
+            <div class="kpi-value" id="kpi-val-power" style="color: var(--accent-violet);">—</div>
+            <div class="kpi-label">Live Power</div>
+            <div class="kpi-trend" id="kpi-trend-power">Waiting data...</div>
+            <div class="kpi-glow" style="background:var(--accent-violet)"></div>
+        </div>
+
+        <!-- KPI 2: Alerts Today -->
+        <div class="card kpi-card" id="kpi-alerts">
+            <div class="kpi-icon amber">🔔</div>
+            <div class="kpi-value" id="kpi-val-alerts" style="color:var(--accent-amber);">0</div>
+            <div class="kpi-label">Alerts Today</div>
+            <div class="kpi-trend" id="kpi-trend-alerts" style="color:var(--text-muted)">No critical alerts</div>
+            <div class="kpi-glow" style="background:var(--accent-amber)"></div>
+        </div>
+
+        <!-- KPI 3: Storm Status -->
+        <div class="card kpi-card">
+            <div class="kpi-icon emerald">🌪️</div>
+            <div class="kpi-value" id="kpi-val-storm" style="color:var(--accent-emerald);font-size:18px">Connecting</div>
+            <div class="kpi-label">Storm Cluster</div>
+            <div class="kpi-trend" id="kpi-trend-storm" style="color:var(--text-muted)">Fog Gateway</div>
+            <div class="kpi-glow" style="background:var(--accent-emerald)"></div>
+        </div>
+
+        <!-- KPI 4: Msg/s -->
+        <div class="card kpi-card">
+            <div class="kpi-icon cyan">📡</div>
+            <div class="kpi-value" id="kpi-val-speed" style="color:var(--accent-cyan);">—</div>
+            <div class="kpi-label">Messages/sec</div>
+            <div class="kpi-trend" id="kpi-trend-speed" style="color:var(--text-muted)">MQTT ingestion rate</div>
+            <div class="kpi-glow" style="background:var(--accent-cyan)"></div>
+        </div>
+
+        <!-- Main Energy Chart -->
+        <div class="card chart-main">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Energy Consumption</div>
+                    <div class="chart-sub" id="chart-desc">Select a house to view data</div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-secondary" onclick="toggleForecast()" id="btn-forecast" style="font-size:11px;padding:6px 10px;">Show Forecast</button>
+                    <button class="btn btn-secondary" onclick="exportCSV()" style="font-size:11px;padding:6px 10px;">⬇ CSV</button>
+                </div>
+            </div>
+            <div class="chart-canvas-wrap">
+                <canvas id="main-chart"></canvas>
+                <div class="loading" id="chart-loading" style="position:absolute;inset:0;background:var(--bg-card);">
+                    <div class="spinner"></div> Waiting for house selection...
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Panel -->
+        <div class="card noti-panel">
+            <div class="chart-title" style="margin-bottom:12px;">Live Alerts <span id="noti-count" style="font-size:11px;color:var(--accent-rose);font-weight:700;"></span></div>
+            <div class="noti-tabs">
+                <button class="noti-tab active" onclick="switchNotiTab('device',this)">Device</button>
+                <button class="noti-tab" onclick="switchNotiTab('household',this)">Household</button>
+                <button class="noti-tab" onclick="switchNotiTab('house',this)">House</button>
+            </div>
+            <div class="noti-list" id="noti-list-device"></div>
+            <div class="noti-list" id="noti-list-household" style="display:none"></div>
+            <div class="noti-list" id="noti-list-house" style="display:none"></div>
+        </div>
+
+        <!-- Storm Log -->
+        <div class="card log-card">
+            <div class="chart-header" style="margin-bottom:10px;">
+                <div class="chart-title">Storm Log <span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-left:8px;">real-time</span></div>
+                <button class="btn btn-secondary" onclick="clearLog()" style="font-size:10px;padding:4px 8px;">Clear</button>
+            </div>
+            <div class="log-box" id="storm-log">
+                <div class="log-line" style="color:var(--text-muted)">⏳ Waiting for Storm cluster log...</div>
+            </div>
+        </div>
+
+        <!-- Spout Status -->
+        <div class="card spout-card">
+            <div class="chart-title">Spout Status</div>
+            <div class="spout-grid">
+                <div class="spout-metric">
+                    <div class="spout-metric-val" id="spout-speed">—</div>
+                    <div class="spout-metric-key">Recv / s</div>
+                </div>
+                <div class="spout-metric">
+                    <div class="spout-metric-val" id="spout-total">—</div>
+                    <div class="spout-metric-key">Total</div>
+                </div>
+                <div class="spout-metric">
+                    <div class="spout-metric-val" id="spout-queue">—</div>
+                    <div class="spout-metric-key">Queue</div>
+                </div>
+                <div class="spout-metric">
+                    <div class="spout-metric-val" id="spout-success" style="color:var(--accent-emerald)">—</div>
+                    <div class="spout-metric-key">Success</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slack Config Card -->
+        <div class="card slack-card">
+            <div class="slack-card-inner">
+                <div class="slack-logo">💬</div>
+                <div class="slack-info">
+                    <div class="slack-title">Slack Alert Integration</div>
+                    <div class="slack-desc">Nhận cảnh báo overload tức thì qua Slack khi thiết bị vượt ngưỡng tiêu thụ điện. Sử dụng Incoming Webhook từ Slack App.</div>
+                </div>
+                <div class="slack-actions">
+                    <input type="text" class="slack-webhook-input" id="slack-webhook-input"
+                        placeholder="https://hooks.slack.com/services/xxx/yyy/zzz"
+                        title="Paste Slack Incoming Webhook URL here">
+                    <button class="btn btn-primary" onclick="saveSlackWebhook()">💾 Save</button>
+                    <button class="btn btn-danger" onclick="testSlack()">🧪 Test</button>
+                    <button class="btn btn-secondary" onclick="window.open('https://api.slack.com/messaging/webhooks','_blank')" style="font-size:11px">📖 Guide</button>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /bento -->
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let metaData = null;
+let chartInstance = null;
+let chartData = { actual: [], forecast: [] };
+let showForecast = false;
+let alertCount = 0;
+let currentNotiTab = 'device';
+let notiCounts = { device: 0, household: 0, house: 0 };
+const NOTI_MAX = 50;
+
+// ── Socket.IO ─────────────────────────────────────────────────────────────────
+const socket = io();
+
+socket.on('connect', () => {
+    document.getElementById('kpi-val-storm').textContent = 'Online';
+    document.getElementById('kpi-trend-storm').textContent = 'Fog Gateway ✓';
+    document.getElementById('kpi-trend-storm').style.color = 'var(--accent-emerald)';
+    setLastUpdate('Connected to Storm gateway');
+});
+
+socket.on('disconnect', () => {
+    document.getElementById('kpi-val-storm').textContent = 'Offline';
+    document.getElementById('kpi-trend-storm').textContent = 'Reconnecting...';
+    document.getElementById('kpi-trend-storm').style.color = 'var(--accent-rose)';
+});
+
+socket.on('log', (data) => { renderLog(data); });
+socket.on('spout', (data) => { renderSpout(data); });
+socket.on('notification', (data) => { renderNotification(data); });
+
+// ── Log Renderer ──────────────────────────────────────────────────────────────
+function renderLog(data) {
+    const logBox = document.getElementById('storm-log');
+    const lines = (typeof data === 'string' ? data : JSON.stringify(data, null, 2)).split('\n');
+    lines.forEach(line => {
+        if (!line.trim()) return;
+        const div = document.createElement('div');
+        div.className = 'log-line';
+        // Colorize
+        const colored = line
+            .replace(/\[([^\]]+)\]/g, '<span class="key">[$1]</span>')
+            .replace(/(\d+\.?\d*)\s*(mess\/s|ms|s\b)/g, '<span class="val">$1$2</span>')
+            .replace(/(WARN|ERROR|FAIL)/gi, '<span class="warn">$1</span>');
+        div.innerHTML = colored;
+        logBox.appendChild(div);
+        if (logBox.children.length > 200) logBox.removeChild(logBox.firstChild);
+        logBox.scrollTop = logBox.scrollHeight;
+    });
+}
+
+// ── Spout Renderer ────────────────────────────────────────────────────────────
+function renderSpout(data) {
+    try {
+        const obj = typeof data === 'string' ? JSON.parse(data) : data;
+        const get = (k) => obj[k] !== undefined ? obj[k] : '—';
+        document.getElementById('spout-speed').textContent   = get('receiveSpeed') || get('speed') || '—';
+        document.getElementById('spout-total').textContent   = get('receiveTotal') || get('total') || '—';
+        document.getElementById('spout-queue').textContent   = get('queue') || '—';
+        document.getElementById('spout-success').textContent = get('success') || '—';
+        document.getElementById('kpi-val-speed').textContent = (get('receiveSpeed') || get('speed') || '—').toString();
+
+        setLastUpdate('Last update: ' + new Date().toLocaleTimeString('vi-VN'));
+    } catch(e) {
+        // Plain text spout log
+        const lines = (data || '').split('\n');
+        lines.forEach(l => {
+            const m = l.match(/Speed.*?(\d+)/);
+            if (m) {
+                document.getElementById('kpi-val-speed').textContent = m[1];
+                document.getElementById('spout-speed').textContent   = m[1];
+            }
+        });
+    }
+}
+
+// ── Notification Renderer ─────────────────────────────────────────────────────
+function renderNotification(data) {
+    try {
+        const noti = typeof data === 'string' ? JSON.parse(data) : data;
+        alertCount++;
+        document.getElementById('kpi-val-alerts').textContent = alertCount;
+
+        const typeMap = { '1': { label: '⚡ Over Max', cls: 'critical' }, '0': { label: '📈 Over Avg', cls: 'warning' }, '-1': { label: '📉 Under Min', cls: 'info' } };
+        const t = typeMap[String(noti.type)] || { label: '⚠️ Alert', cls: 'warning' };
+
+        // Determine level
+        let level = 'device', listId = 'noti-list-device';
+        if (noti.deviceId == null && noti.householdId != null) { level = 'household'; listId = 'noti-list-household'; }
+        else if (noti.deviceId == null && noti.householdId == null) { level = 'house'; listId = 'noti-list-house'; }
+
+        notiCounts[level]++;
+        updateNotiCount();
+
+        const list = document.getElementById(listId);
+        const item = document.createElement('div');
+        item.className = `noti-item ${t.cls}`;
+
+        const val = noti.value ? parseFloat(noti.value).toFixed(1) + ' W' : 'N/A';
+        const max = noti.max  ? parseFloat(noti.max).toFixed(1)  + ' W' : 'N/A';
+
+        item.innerHTML = `
+            <div class="noti-title">${t.label} — ${level === 'device' ? 'House ' + noti.houseId + ' / Device ' + noti.deviceId : 'House ' + noti.houseId}</div>
+            <div class="noti-desc">Current: <strong>${val}</strong> · Threshold: ${max}</div>
+            <div class="noti-time">${new Date().toLocaleTimeString('vi-VN')}</div>
+            <div class="noti-slack" id="slack-sent-${Date.now()}"></div>
+        `;
+        list.prepend(item);
+        if (list.children.length > NOTI_MAX) list.removeChild(list.lastChild);
+
+        // Flash KPI alert
+        const kpiAlerts = document.getElementById('kpi-alerts');
+        kpiAlerts.style.borderColor = 'rgba(244,63,94,0.5)';
+        setTimeout(() => { kpiAlerts.style.borderColor = ''; }, 1000);
+
+        if (t.cls === 'critical') {
+            document.getElementById('kpi-trend-alerts').textContent = '🔴 Critical alert!';
+            document.getElementById('kpi-trend-alerts').style.color = 'var(--accent-rose)';
+        }
+    } catch(e) { console.warn('Notification parse error', e, data); }
+}
+
+function updateNotiCount() {
+    const total = notiCounts.device + notiCounts.household + notiCounts.house;
+    document.getElementById('noti-count').textContent = total > 0 ? `(${total})` : '';
+}
+
+function switchNotiTab(tab, btn) {
+    currentNotiTab = tab;
+    document.querySelectorAll('.noti-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    ['device','household','house'].forEach(t => {
+        document.getElementById(`noti-list-${t}`).style.display = t === tab ? 'flex' : 'none';
+    });
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
+function initChart() {
+    const ctx = document.getElementById('main-chart').getContext('2d');
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Actual (W)',
+                    data: [], fill: true,
+                    borderColor: 'rgba(139,92,246,0.9)',
+                    backgroundColor: (ctx) => {
+                        const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+                        g.addColorStop(0, 'rgba(139,92,246,0.25)');
+                        g.addColorStop(1, 'rgba(139,92,246,0.01)');
+                        return g;
+                    },
+                    borderWidth: 2, pointRadius: 0, tension: 0.4,
+                },
+                {
+                    label: 'Forecast (W)',
+                    data: [], fill: false,
+                    borderColor: 'rgba(6,182,212,0.7)',
+                    borderDash: [5,4], borderWidth: 1.5,
+                    pointRadius: 0, tension: 0.4, hidden: true,
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            animation: { duration: 600, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: true, labels: { color: '#a0a0c0', font: { size: 11 }, boxWidth: 16 } },
+                tooltip: {
+                    backgroundColor: 'rgba(10,10,20,0.9)',
+                    borderColor: 'rgba(139,92,246,0.3)', borderWidth: 1,
+                    titleColor: '#f0f0ff', bodyColor: '#a0a0c0',
+                    padding: 10, cornerRadius: 10,
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${parseFloat(ctx.raw).toFixed(2)} W`
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { color: '#5a5a7a', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                y: { ticks: { color: '#5a5a7a', font: { size: 10 }, callback: v => v + ' W' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+            }
+        }
+    });
+}
+
+function loadChart() {
+    const houseId = document.getElementById('house').value;
+    if (!houseId) return;
+
+    const householdId = document.getElementById('household').value;
+    const deviceId    = document.getElementById('device').value;
+    const sliceGap    = document.getElementById('slice_gap').value;
+    const day         = document.getElementById('day').value;
+
+    document.getElementById('chart-loading').style.display = 'flex';
+    document.getElementById('chart-loading').innerHTML = '<div class="spinner"></div> Loading energy data...';
+
+    const params = new URLSearchParams({ house_id: houseId, slice_gap: sliceGap });
+    if (householdId && householdId !== '*') params.append('household_id', householdId);
+    if (deviceId    && deviceId    !== '*') params.append('device_id',    deviceId);
+    if (day         && day         !== '*') params.append('day',           day);
+
+    fetch('/api/query?' + params)
+        .then(r => r.json())
+        .then(data => {
+            const pts = Object.values(data).sort((a,b) => {
+                const ta = `${a.year}/${a.month}/${a.day}/${String(a.slice_index).padStart(6,'0')}`;
+                const tb = `${b.year}/${b.month}/${b.day}/${String(b.slice_index).padStart(6,'0')}`;
+                return ta.localeCompare(tb);
+            });
+            chartInstance.data.labels = pts.map(p => `${p.month}/${p.day} ${String(p.slice_index).padStart(3,'0')}`);
+            chartInstance.data.datasets[0].data = pts.map(p => parseFloat(p.avg || 0).toFixed(3));
+            chartInstance.update();
+
+            // Update KPI power
+            if (pts.length) {
+                const last = parseFloat(pts[pts.length-1].avg || 0);
+                document.getElementById('kpi-val-power').textContent = last.toFixed(1) + ' W';
+            }
+
+            document.getElementById('chart-desc').textContent = `House ${houseId} · Window ${sliceGap}min · ${pts.length} data points`;
+            document.getElementById('chart-loading').style.display = 'none';
+
+            if (showForecast) loadForecast();
+        })
+        .catch(err => {
+            document.getElementById('chart-loading').innerHTML = '⚠️ Failed to load data';
+            showToast('Chart load failed: ' + err.message, 'error');
+        });
+}
+
+function loadForecast() {
+    const houseId = document.getElementById('house').value;
+    if (!houseId) return;
+    const params = new URLSearchParams({
+        house_id: houseId,
+        slice_gap: document.getElementById('slice_gap').value,
+        version: 'v0'
+    });
+    fetch('/api/queryforecast?' + params)
+        .then(r => r.json())
+        .then(data => {
+            const pts = Object.values(data).sort((a,b) => `${a.year}/${a.month}/${a.day}/${String(a.slice_index).padStart(6,'0')}`.localeCompare(`${b.year}/${b.month}/${b.day}/${String(b.slice_index).padStart(6,'0')}`));
+            chartInstance.data.datasets[1].data = pts.map(p => parseFloat(p.avg || 0).toFixed(3));
+            chartInstance.data.datasets[1].hidden = false;
+            chartInstance.update();
+        })
+        .catch(e => console.warn('Forecast error', e));
+}
+
+function toggleForecast() {
+    showForecast = !showForecast;
+    const btn = document.getElementById('btn-forecast');
+    if (showForecast) {
+        btn.style.color = 'var(--accent-cyan)';
+        btn.style.borderColor = 'rgba(6,182,212,0.4)';
+        loadForecast();
+    } else {
+        btn.style.color = '';
+        btn.style.borderColor = '';
+        chartInstance.data.datasets[1].data = [];
+        chartInstance.data.datasets[1].hidden = true;
+        chartInstance.update();
+    }
+}
+
+function exportCSV() {
+    const labels = chartInstance.data.labels;
+    const actual = chartInstance.data.datasets[0].data;
+    let csv = 'Time,Actual(W)\n';
+    labels.forEach((l, i) => { csv += `${l},${actual[i]}\n`; });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `energy_export_${Date.now()}.csv`; a.click();
+}
+
+// ── Metadata (selects) ────────────────────────────────────────────────────────
+function loadMeta() {
+    fetch('/api/getmeta')
+        .then(r => r.json())
+        .then(data => {
+            metaData = data;
+            const houseSelect = document.getElementById('house');
+            houseSelect.innerHTML = '<option value="">— Select House —</option>';
+            const houses = Object.keys(data.house_data_topo || {}).sort((a,b) => parseInt(a)-parseInt(b));
+            houses.forEach(h => {
+                const o = document.createElement('option');
+                o.value = h; o.textContent = `House ${h}`;
+                houseSelect.appendChild(o);
+            });
+            populateDays();
+            setLastUpdate('Metadata loaded · ' + houses.length + ' houses');
+        })
+        .catch(e => { setLastUpdate('⚠️ DB not connected — topology not running?'); });
+}
+
+function onHouseChange() {
+    const houseId = document.getElementById('house').value;
+    if (!houseId || !metaData) return;
+
+    // Populate households
+    const hhSelect = document.getElementById('household');
+    hhSelect.innerHTML = '<option value="*">All Households</option>';
+    const hhs = Object.keys((metaData.household_data_topo || {})[houseId] || {}).sort((a,b)=>parseInt(a)-parseInt(b));
+    hhs.forEach(h => {
+        const o = document.createElement('option'); o.value = h; o.textContent = `Household ${h}`;
+        hhSelect.appendChild(o);
+    });
+
+    // Subscribe to MQTT notifications for this house
+    socket.emit('request', JSON.stringify({ topic: `house-${houseId}-notification` }));
+
+    populateDays(houseId);
+    loadChart();
+}
+
+function onHouseholdChange() {
+    const houseId = document.getElementById('house').value;
+    const hhId = document.getElementById('household').value;
+    if (!houseId || !metaData) return;
+
+    const devSelect = document.getElementById('device');
+    devSelect.innerHTML = '<option value="*">All Devices</option>';
+    if (hhId !== '*') {
+        const devices = Object.keys(((metaData.device_data_topo || {})[houseId] || {})[hhId] || {}).sort((a,b)=>parseInt(a)-parseInt(b));
+        devices.forEach(d => {
+            const o = document.createElement('option'); o.value = d; o.textContent = `Device ${d}`;
+            devSelect.appendChild(o);
+        });
+        socket.emit('request', JSON.stringify({ topic: `household-${houseId}-${hhId}-notification` }));
+    }
+    loadChart();
+}
+
+function populateDays(houseId) {
+    const daySelect = document.getElementById('day');
+    daySelect.innerHTML = '<option value="*">All Days</option>';
+    if (!metaData || !houseId) return;
+    const days = (metaData.house_data_topo || {})[houseId] || [];
+    const unique = [...new Set(days.map(d => d.text))];
+    unique.forEach(d => {
+        const o = document.createElement('option'); o.value = d.split('/')[2]; o.textContent = d;
+        daySelect.appendChild(o);
+    });
+}
+
+// ── Slack Integration ─────────────────────────────────────────────────────────
+function loadSlackStatus() {
+    fetch('/api/slack-config')
+        .then(r => r.json())
+        .then(cfg => {
+            const badge = document.getElementById('sidebar-slack-badge');
+            const input = document.getElementById('slack-webhook-input');
+            if (cfg.enabled) {
+                badge.className = 'slack-badge on';
+                badge.innerHTML = '<span class="dot"></span> Active';
+            } else {
+                badge.className = 'slack-badge off';
+                badge.innerHTML = '<span class="dot"></span> Disabled';
+            }
+            if (cfg.hasWebhook) input.value = '••••••••••••••••••••••••••••••••••••• (set)';
+        })
+        .catch(() => {});
+}
+
+function saveSlackWebhook() {
+    const url = document.getElementById('slack-webhook-input').value.trim();
+    if (url.startsWith('•')) { showToast('Webhook already set. Clear and re-enter to change.', 'info'); return; }
+    if (!url.startsWith('https://hooks.slack.com/')) {
+        showToast('Invalid URL. Must start with https://hooks.slack.com/', 'error'); return;
+    }
+    fetch('/api/slack-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhookUrl: url })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) { showToast('✅ Slack webhook saved!', 'success'); loadSlackStatus(); }
+        else showToast('Failed to save', 'error');
+    })
+    .catch(() => showToast('Server error', 'error'));
+}
+
+function testSlack() {
+    fetch('/api/test-slack', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) showToast('🧪 Test alert sent to Slack!', 'success');
+            else showToast('❌ ' + (res.error || 'Slack not configured'), 'error');
+        })
+        .catch(() => showToast('Server error while testing Slack', 'error'));
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function setLastUpdate(msg) {
+    document.getElementById('last-update').textContent = msg;
+}
+
+function clearLog() {
+    document.getElementById('storm-log').innerHTML = '<div class="log-line" style="color:var(--text-muted)">Log cleared</div>';
+}
+
+function setView(v) {
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+}
+
+function showToast(msg, type = 'info') {
+    const tc = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = msg;
+    tc.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    initChart();
+    loadMeta();
+    loadSlackStatus();
+    // Show empty state if no noti yet
+    ['device','household','house'].forEach(t => {
+        const list = document.getElementById(`noti-list-${t}`);
+        list.innerHTML = `<div class="empty"><div class="empty-icon">🔔</div><div class="empty-text">No ${t} alerts yet</div></div>`;
+    });
+});
+</script>
 </body>
-
 </html>
