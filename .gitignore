@@ -1,2 +1,26 @@
-/gateway/target/
-/gateway/tagawarescheduler/target/
+# Maven build output
+**/target/
+
+# Env files thật (chứa IP/credentials) — chỉ commit các file *.example
+.env.cloud
+.env.gateway
+cloud/.env
+gateway/.env
+
+# Terraform state & secrets
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.*
+infrastructure/terraform/.terraform.lock.hcl
+
+# Hệ điều hành
+.DS_Store
+
+# Per-house Slack routing (contains webhook secrets); keep the example tracked
+fog-gateway/config/alert-routes.json
+
+# Editor / IDE
+.metals/
+.vscode/
+.bloop/
+*.code-workspace

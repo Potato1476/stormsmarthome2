@@ -1,0 +1,9 @@
+{
+  "__comment": "Per-house Slack alert routing. Copy to alert-routes.json and fill in real webhooks. 'default' is the admin catch-all for any house not listed in 'routes'. Keys in 'routes' are houseId as strings.",
+  "default": "https://hooks.slack.com/services/ADMIN/CHANNEL/WEBHOOK",
+  "routes": {
+    "0": "https://hooks.slack.com/services/HOUSE0/CHANNEL/WEBHOOK",
+    "1": "https://hooks.slack.com/services/HOUSE1/CHANNEL/WEBHOOK",
+    "3": "https://hooks.slack.com/services/HOUSE3/CHANNEL/WEBHOOK"
+  }
+}

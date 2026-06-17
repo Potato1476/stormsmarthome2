@@ -1,0 +1,246 @@
+# ============================================================================
+# GATEWAY TIER  —  giả lập Raspberry Pi trên máy LOCAL
+#
+# Đây là tầng Gateway của mô hình Fog. Chạy trên laptop/PC để "đóng vai" Pi:
+#   - 8 container gw-01..gw-08, mỗi cái bị giới hạn 1 GB RAM / 1 vCPU
+#     (đúng cấu hình Raspberry Pi 3 Model B). Mỗi gateway phục vụ 5 nhà.
+#   - fog-prometheus  : thu thập metrics của 8 gateway (local) + Storm Cloud (AWS)
+#   - fog-grafana     : dashboard so sánh (cổng 3000)
+#
+# Vì sao monitoring đặt ở đây mà không ở Cloud?
+#   Máy local nằm sau NAT → Cloud (AWS) KHÔNG gọi ngược vào được.
+#   Nhưng máy local thì gọi RA Cloud (public IP) được. Nên Prometheus đặt ở
+#   local sẽ scrape được CẢ hai tầng: gateway (localhost) + Cloud exporter (AWS).
+#
+# Trước khi chạy:
+#   1. Đã `terraform apply` xong, có CLOUD_PUBLIC_IP.
+#   2. Tạo .env.gateway:  cp .env.gateway.example .env.gateway
+#      rồi điền CLOUD_PUBLIC_IP = IP public của EC2 Cloud.
+#   3. Sửa IP Cloud trong fog-monitoring/prometheus/prometheus.gateway.yml
+#      (xem hướng dẫn — Prometheus không tự thay biến môi trường được).
+#
+# Chạy:
+#   docker compose -f docker-compose.gateway.yml --env-file .env.gateway up -d
+# ============================================================================
+
+version: '3.8'
+
+x-gateway-base: &gateway-base
+  image: fog-gateway:latest
+  pull_policy: never
+  networks:
+    - fog_net
+  restart: unless-stopped
+  # MÔI TRƯỜNG A (multi-gateway): 8 gateway này thuộc profile "multi".
+  #   docker compose --profile multi up -d
+  # MÔI TRƯỜNG B (single-gateway): chỉ gw-single (profile "single") chạy.
+  #   docker compose --profile single up -d
+  # Broker + monitoring KHÔNG có profile → luôn chạy ở cả hai môi trường.
+  profiles: ["multi"]
+  depends_on:
+    mqtt-broker:
+      condition: service_healthy
+  environment: &gateway-env
+    # SOURCE = local MQTT broker (raw data không bao giờ lên cloud).
+    # CLOUD  = Cloud MQTT trên AWS (chỉ nhận aggregated results).
+    SOURCE_MQTT_HOST: mqtt-broker
+    SOURCE_MQTT_PORT: "1883"
+    CLOUD_MQTT_HOST: ${CLOUD_PUBLIC_IP:?Phai dat CLOUD_PUBLIC_IP trong .env.gateway}
+    CLOUD_MQTT_PORT: ${CLOUD_MQTT_PORT:-1883}
+    MQTT_DATA_TOPIC: iot-data
+    GATEWAY_WINDOWS: ${GATEWAY_WINDOWS:-1,5,10,15,30}
+    FLUSH_INTERVAL_SEC: ${FLUSH_INTERVAL_SEC:-60}
+    METRICS_PORT: "9091"
+    JAVA_OPTS: ${JAVA_OPTS:--Xmx384m -XX:+UseSerialGC -Djava.awt.headless=true}
+    QUEUE_DIR: /var/fog-queue
+    # ── Multi-channel alerting (Slack) + edge anomaly detection ──────────────
+    # Alerting auto-enables when SLACK_WEBHOOK_URL (admin/default channel) is set
+    # OR a per-house routes file is mounted. Leave both empty to disable.
+    SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+    # Per-house routing: maps houseId -> that house's own Slack channel webhook.
+    # Mounted read-only below; unmapped houses fall back to SLACK_WEBHOOK_URL.
+    ALERT_ROUTES_FILE: ${ALERT_ROUTES_FILE:-/config/alert-routes.json}
+    ALERT_ENABLED: ${ALERT_ENABLED:-true}
+    ALERT_HARD_CEILING_W: ${ALERT_HARD_CEILING_W:-2500}
+    ALERT_Z_THRESHOLD: ${ALERT_Z_THRESHOLD:-3.0}
+    ALERT_EWMA_ALPHA: ${ALERT_EWMA_ALPHA:-0.3}
+    ALERT_WARMUP: ${ALERT_WARMUP:-20}
+    ALERT_COOLDOWN_SEC: ${ALERT_COOLDOWN_SEC:-60}
+    ALERT_MIN_INTERVAL_MS: ${ALERT_MIN_INTERVAL_MS:-1000}
+  volumes:
+    - fog_queue:/var/fog-queue
+    # Per-house Slack routing table (read-only). Must exist on host before `up`,
+    # else Docker creates a directory in its place. Copy from the example file.
+    - ./fog-gateway/config/alert-routes.json:/config/alert-routes.json:ro
+  deploy:
+    resources:
+      limits:
+        memory: 1g
+        cpus: "1.0"
+
+services:
+
+  # ── Local MQTT Broker ─────────────────────────────────────────────────────────
+  # Publisher bơm dữ liệu thô vào đây (localhost:1883 từ máy host).
+  # Gateway đọc từ đây — raw data KHÔNG lên Cloud.
+  mqtt-broker:
+    image: eclipse-mosquitto:2.0
+    container_name: local-mqtt
+    networks:
+      - fog_net
+    ports:
+      - "1883:1883"   # publisher kết nối từ máy host vào localhost:1883
+    volumes:
+      - ./fog-gateway/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-p", "1883", "-t", "health", "-m", "ok", "-q", "0"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 2s
+    restart: unless-stopped
+
+  gw-01:
+    <<: *gateway-base
+    container_name: gw-01
+    hostname: gw-01
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-01
+      HOUSE_IDS: "0,1,2,3,4"
+    ports:
+      - "9091:9091"
+
+  gw-02:
+    <<: *gateway-base
+    container_name: gw-02
+    hostname: gw-02
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-02
+      HOUSE_IDS: "5,6,7,8,9"
+    ports:
+      - "9092:9091"
+
+  gw-03:
+    <<: *gateway-base
+    container_name: gw-03
+    hostname: gw-03
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-03
+      HOUSE_IDS: "10,11,12,13,14"
+    ports:
+      - "9093:9091"
+
+  gw-04:
+    <<: *gateway-base
+    container_name: gw-04
+    hostname: gw-04
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-04
+      HOUSE_IDS: "15,16,17,18,19"
+    ports:
+      - "9094:9091"
+
+  gw-05:
+    <<: *gateway-base
+    container_name: gw-05
+    hostname: gw-05
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-05
+      HOUSE_IDS: "20,21,22,23,24"
+    ports:
+      - "9095:9091"
+
+  gw-06:
+    <<: *gateway-base
+    container_name: gw-06
+    hostname: gw-06
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-06
+      HOUSE_IDS: "25,26,27,28,29"
+    ports:
+      - "9096:9091"
+
+  gw-07:
+    <<: *gateway-base
+    container_name: gw-07
+    hostname: gw-07
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-07
+      HOUSE_IDS: "30,31,32,33,34"
+    ports:
+      - "9097:9091"
+
+  gw-08:
+    <<: *gateway-base
+    container_name: gw-08
+    hostname: gw-08
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-08
+      HOUSE_IDS: "35,36,37,38,39"
+    ports:
+      - "9098:9091"
+
+  # ── MÔI TRƯỜNG B: 1 gateway DUY NHẤT xử lý cả 40 nhà ─────────────────────────
+  # Cùng giới hạn 1GB/1vCPU (giả lập 1 thiết bị biên rẻ tiền RAM nhỏ). Chỉ chạy
+  # khi `--profile single`. Mục đích: 1 node 1GB có gánh nổi 40 nhà không, hay
+  # nghẽn → minh chứng cần phân tán nhiều gateway (môi trường A).
+  gw-single:
+    <<: *gateway-base
+    container_name: gw-single
+    hostname: gw-single
+    profiles: ["single"]
+    environment:
+      <<: *gateway-env
+      GATEWAY_ID: gw-single
+      HOUSE_IDS: "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39"
+    ports:
+      - "9099:9091"
+
+  # ── Monitoring (đặt cùng phía gateway/local) ─────────────────────────────────
+  fog-prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: fog-prometheus
+    networks:
+      - fog_net
+    volumes:
+      - ./fog-monitoring/prometheus/prometheus.gateway.yml:/etc/prometheus/prometheus.yml
+      # Giữ dữ liệu đo qua các lần restart — cần cho kịch bản chạy nhiều nấc (KB1)
+      - fog_prom_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+  fog-grafana:
+    image: grafana/grafana:11.1.0
+    container_name: fog-grafana
+    networks:
+      - fog_net
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./fog-monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    depends_on:
+      - fog-prometheus
+    restart: unless-stopped
+
+networks:
+  fog_net:
+    driver: bridge
+
+volumes:
+  fog_queue:
+  fog_prom_data:
