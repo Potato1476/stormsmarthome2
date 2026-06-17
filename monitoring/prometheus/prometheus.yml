@@ -5,4 +5,6 @@ global:
 scrape_configs:
   - job_name: 'storm-exporter'
     static_configs:
-      - targets: ['storm-exporter:8000'] # Thay đổi port ở đây nếu exporter của bạn dùng port khác
+      # Placeholder — thay bằng EIP thật của máy cloud trước khi chạy:
+      #   sed -i '' "s/CLOUD_PUBLIC_IP/<ip>/" monitoring/prometheus/prometheus.yml
+      - targets: ['CLOUD_PUBLIC_IP:8000']

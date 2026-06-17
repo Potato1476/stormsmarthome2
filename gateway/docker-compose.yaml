@@ -1,54 +1,22 @@
+# ============================================================================
+# FOG v1 (code thầy + TagAwareScheduler) — TẦNG GATEWAY
+#
+# Chạy trên máy gateway (EC2 nhỏ / Raspberry Pi class). Gồm:
+#   - mqtt-broker : broker LOCAL — nhận dữ liệu thô từ publisher và phát
+#                   cảnh báo thiết bị tức thì cho hộ gia đình (không qua WAN)
+#   - supervisor1 : Storm supervisor KHÔNG tag → TagAwareScheduler xếp các
+#                   thành phần nhẹ vào đây: spout-data, spout-trigger,
+#                   split-*, avg-* (+ __acker)
+#
+# ZooKeeper / Nimbus / MySQL / supervisor2 nằm bên máy CLOUD
+# (cloud/docker-compose.yml). Cần file .env (xem .env.example):
+#   CLOUD_PUBLIC_IP=<IP máy cloud>
+#   GW_MEM_LIMIT=1g   GW_CPUS=1   (mô phỏng Raspberry Pi 3: 1GB RAM / CPU yếu)
+#
+# Chạy:  docker compose up -d
+# ============================================================================
+
 services:
-  zookeeper:
-    image: zookeeper:3.8.5
-    container_name: zookeeper
-    hostname: zookeeper
-    networks:
-      storm_network:
-    volumes:
-      - ./storm/config/zoo.cfg:/conf/zoo.cfg
-    ports:
-      - 2181:2181
-
-  nimbus:
-    image: storm:2.1.0
-    container_name: nimbus
-    hostname: nimbus
-    command: sh -c "storm nimbus & storm ui"
-    volumes:
-      - ./storm/config/nimbus.yaml:/conf/storm.yaml
-      - ./tagawarescheduler/target/tagawarescheduler-1.0.jar:/apache-storm-2.1.0/lib/tagawarescheduler-1.0.jar
-      - ./target/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar:/apache-storm-2.1.0/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar
-    ports:
-      - 8080:8080
-      - 6627:6627
-    restart: always
-    extra_hosts:
-      - "mysql:3.144.243.7"
-    networks:
-      storm_network:
-    depends_on:
-      - zookeeper
-
-  supervisor1:
-    image: storm:2.1.0
-    container_name: supervisor1
-    hostname: supervisor1
-    command: storm supervisor
-    depends_on:
-      - nimbus
-      - zookeeper
-    restart: always
-    volumes:
-      - ./storm/config/supervisor.yaml:/conf/storm.yaml
-    ports:
-      - 6700-6703:6700-6703
-    extra_hosts:
-      - "mysql:3.144.243.7"
-      - "supervisor2:10.0.41.102"
-    networks:
-      storm_network:
-
   mqtt-broker:
     image: mr4x2/mqtt-broker-iotdata:v1
     container_name: mqtt-broker
@@ -56,6 +24,30 @@ services:
       storm_network:
     ports:
       - 1883:1883
+    restart: always
+
+  supervisor1:
+    image: storm:2.1.0
+    container_name: supervisor1
+    hostname: supervisor1
+    command: storm supervisor
+    depends_on:
+      - mqtt-broker
+    restart: always
+    volumes:
+      - ./storm/config/supervisor.yaml:/conf/storm.yaml
+    ports:
+      - 6700-6703:6700-6703
+    # Giới hạn tài nguyên cỡ Raspberry Pi 3 (1GB RAM / 1 vCPU) — chỉnh qua .env
+    mem_limit: ${GW_MEM_LIMIT:-1g}
+    cpus: ${GW_CPUS:-1}
+    extra_hosts:
+      - "zookeeper:${CLOUD_PUBLIC_IP}"
+      - "nimbus:${CLOUD_PUBLIC_IP}"
+      - "supervisor2:${CLOUD_PUBLIC_IP}"
+      - "mysql:${CLOUD_PUBLIC_IP}"
+    networks:
+      storm_network:
 
 networks:
   storm_network:

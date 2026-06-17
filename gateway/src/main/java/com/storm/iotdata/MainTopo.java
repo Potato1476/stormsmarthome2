@@ -11,6 +11,7 @@ import java.io.FileWriter;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 
 import com.storm.iotdata.functions.*;
 import com.storm.iotdata.models.*;
@@ -30,6 +31,13 @@ import org.apache.storm.topology.BoltDeclarer;
 import org.apache.storm.topology.TopologyBuilder;
 
 public class MainTopo {
+    private static BoltDeclarer tagCloud(BoltDeclarer declarer, String type, Integer window, HashSet<String> cloudBolts) {
+        if (cloudBolts.contains(type) || cloudBolts.contains(type + "-" + window)) {
+            declarer.addConfiguration("tags", "cloud");
+        }
+        return declarer;
+    }
+
     public static void main(String[] args) throws Exception {
         StormConfig config = new StormConfig();
         System.out.println(config.toString());
@@ -47,6 +55,8 @@ public class MainTopo {
             options.addOption(opt_windows_list);
             Option opt_develop = new Option("d", "develop", false, "Developing mode");
             options.addOption(opt_develop);
+            Option opt_cloudbolts = new Option("c", "cloudbolts", true, "Bolt list tagged \"cloud\" (split by \",\", accepts type or type-window. Default: sum,forecast)");
+            options.addOption(opt_cloudbolts);
 
             CommandLineParser parser = new DefaultParser();
             HelpFormatter formatter = new HelpFormatter();
@@ -83,6 +93,11 @@ public class MainTopo {
                     config.setWindowList(Arrays.asList(windowList));
                 }
                 
+                // Init cloud-tagged bolt list (placed on the cloud-tier supervisor by TagAwareScheduler,
+                // accepts type ("sum") or type-window ("avg-60"); untagged bolts stay on the gateway tier)
+                HashSet<String> cloudBolts = new HashSet<String>(Arrays.asList(
+                        (cmd.hasOption("cloudbolts") ? cmd.getOptionValue("cloudbolts") : "sum,forecast").split(",")));
+
                 TopologyBuilder builder = new TopologyBuilder();
                 builder.setSpout("spout-trigger", new Spout_trigger(config), 1);
 
@@ -96,13 +111,13 @@ public class MainTopo {
                 HashMap<String, BoltDeclarer> forecastList = new HashMap<String, BoltDeclarer>();
                 for (Integer windowSize : config.getWindowList()) {
                     splitList.put("split-" + windowSize,
-                            builder.setBolt("split-" + windowSize, new Bolt_split(windowSize, config), 1).setNumTasks(4));
+                            tagCloud(builder.setBolt("split-" + windowSize, new Bolt_split(windowSize, config), 1).setNumTasks(4), "split", windowSize, cloudBolts));
                     avgList.put("avg-" + windowSize,
-                            builder.setBolt("avg-" + windowSize, new Bolt_avg(windowSize, config), 1));
+                            tagCloud(builder.setBolt("avg-" + windowSize, new Bolt_avg(windowSize, config), 1), "avg", windowSize, cloudBolts));
                     sumList.put("sum-" + windowSize,
-                            builder.setBolt("sum-" + windowSize, new Bolt_sum(windowSize, config), 1).addConfiguration("tags", "cloud"));
+                            tagCloud(builder.setBolt("sum-" + windowSize, new Bolt_sum(windowSize, config), 1), "sum", windowSize, cloudBolts));
                     forecastList.put("forecast-" + windowSize,
-                            builder.setBolt("forecast-" + windowSize, new Bolt_forecast(windowSize, config), 1).addConfiguration("tags", "cloud"));
+                            tagCloud(builder.setBolt("forecast-" + windowSize, new Bolt_forecast(windowSize, config), 1), "forecast", windowSize, cloudBolts));
                 }
                 
                 for (Integer windowSize : config.getWindowList()) {

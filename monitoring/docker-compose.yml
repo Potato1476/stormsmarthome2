@@ -1,3 +1,10 @@
+# Monitoring FOG v1 — chạy LOCAL trên laptop (laptop với tới được Cloud EC2,
+# chiều ngược lại thì không vì NAT). storm-exporter chạy TRÊN máy cloud
+# (cloud/docker-compose.yml) — Prometheus ở đây scrape <CLOUD_PUBLIC_IP>:8000.
+#
+# Trước khi chạy: thay placeholder trong prometheus/prometheus.yml:
+#   sed -i '' "s/CLOUD_PUBLIC_IP/<ip thật>/" monitoring/prometheus/prometheus.yml
+# Chạy:  docker compose up -d   →  Grafana http://localhost:3000 (admin/admin)
 version: '3.8'
 
 services:
@@ -22,17 +29,4 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
-    restart: unless-stopped
-
-  storm-exporter:
-    # Hình ảnh này giả định phục vụ việc export metric của Storm ra dạng Prometheus
-    # Bạn có thể thay bằng Docker image của bạn nếu có
-    image: mr4x2/stormexporter:v1.2.2
-    container_name: storm-exporter
-    environment:
-      - STORM_UI_HOST=13.250.96.226:8080
-      - PORT_EXPOSE=8000
-      - REFRESH_RATE=5
-    ports:
-      - "8000:8000" # Expose ra port cấu hình trong prometheus
     restart: unless-stopped

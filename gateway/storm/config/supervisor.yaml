@@ -14,3 +14,8 @@ supervisor.slots.ports:
   - 6701
   - 6702
   - 6703
+
+# May gateway co RAM co Raspberry Pi 3 (1GB) -> gioi han heap worker
+# de supervisor + worker + OS khong vuot qua gioi han container
+worker.heap.memory.mb: 512
+supervisor.memory.capacity.mb: 1024

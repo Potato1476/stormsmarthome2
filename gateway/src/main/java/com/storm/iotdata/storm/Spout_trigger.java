@@ -72,10 +72,10 @@ public class Spout_trigger extends BaseRichSpout {
                 }
             }
             // System.gc();
-            _collector.emit("trigger", new Values(config.getUpdateInterval(), new SpoutProp(name, connect, totalSpeed, loadSpeed, total, load, queue, success, fail))); // Trigger signal to write data to file after 1 min
+            _collector.emit("trigger", new Values(config.getUpdateInterval(), new SpoutProp(name, connect, totalSpeed, loadSpeed, total, load, queue, success, fail)), java.util.UUID.randomUUID().toString()); // Trigger signal to write data to file after 1 min
         } catch (InterruptedException e) {
             e.printStackTrace();
-            _collector.emit("trigger", new Values(config.getUpdateInterval(), new SpoutProp())); // Trigger signal to write data to file after 1 min
+            _collector.emit("trigger", new Values(config.getUpdateInterval(), new SpoutProp()), java.util.UUID.randomUUID().toString()); // Trigger signal to write data to file after 1 min
         } 
     }
 

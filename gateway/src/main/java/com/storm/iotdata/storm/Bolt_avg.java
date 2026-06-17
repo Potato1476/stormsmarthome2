@@ -71,7 +71,7 @@ public class Bolt_avg extends BaseRichBolt {
                     for(String key : deviceDataList.keySet()){
                         DeviceData data = deviceDataList.get(key);
                         if(!data.isSaved()){
-                            _collector.emit("data", new Values(data.getClass(), data));
+                            _collector.emit("data", tuple, new Values(data.getClass(), data));
                             needSave.push(data);
                         }
                         else if(data.isSaved() && (System.currentTimeMillis()-data.getLastUpdate())>(cleanTrigger*gap*60000)){
@@ -168,7 +168,7 @@ public class Bolt_avg extends BaseRichBolt {
                         deviceDataList.remove(key);
                     }
 
-                    _collector.emit("trigger", new Values(triggerInterval, spoutProp));
+                    _collector.emit("trigger", tuple, new Values(triggerInterval, spoutProp));
                     processSpeed = Long.valueOf(0);
                     triggerCount = 0;
                 }

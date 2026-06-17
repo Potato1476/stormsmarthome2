@@ -1,0 +1,82 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+
+  # ── Storm exporter của tầng CLOUD (chạy trên AWS) ─────────────────────────────
+  # KHÔNG sửa tay — chạy:  ./infrastructure/scripts/set-cloud-ip.sh
+  # để tự thay 'CLOUD_PUBLIC_IP' bên dưới bằng IP thật (lấy từ terraform output).
+  # Ví dụ sau khi thay: targets: ['13.250.1.2:8000']
+  - job_name: 'cloud-storm-exporter'
+    static_configs:
+      - targets: ['52.74.153.60:8000']
+        labels:
+          tier: 'cloud'
+
+  # ── Metrics của 8 gateway (chạy local, cùng mạng fog_net) ─────────────────────
+  - job_name: 'fog-gateway-gw-01'
+    static_configs:
+      - targets: ['gw-01:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-01'
+
+  - job_name: 'fog-gateway-gw-02'
+    static_configs:
+      - targets: ['gw-02:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-02'
+
+  - job_name: 'fog-gateway-gw-03'
+    static_configs:
+      - targets: ['gw-03:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-03'
+
+  - job_name: 'fog-gateway-gw-04'
+    static_configs:
+      - targets: ['gw-04:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-04'
+
+  - job_name: 'fog-gateway-gw-05'
+    static_configs:
+      - targets: ['gw-05:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-05'
+
+  - job_name: 'fog-gateway-gw-06'
+    static_configs:
+      - targets: ['gw-06:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-06'
+
+  - job_name: 'fog-gateway-gw-07'
+    static_configs:
+      - targets: ['gw-07:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-07'
+
+  - job_name: 'fog-gateway-gw-08'
+    static_configs:
+      - targets: ['gw-08:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-08'
+
+  # ── Gateway DUY NHẤT (môi trường B — profile "single") ───────────────────────
+  # Chỉ UP khi chạy `docker compose --profile single`. Khi chạy môi trường A
+  # (multi) thì target này DOWN — không sao, sum()/max() tự bỏ qua.
+  - job_name: 'fog-gateway-single'
+    static_configs:
+      - targets: ['gw-single:9091']
+        labels:
+          tier: 'gateway'
+          gateway_id: 'gw-single'
