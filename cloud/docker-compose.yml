@@ -1,20 +1,77 @@
+# ============================================================================
+# FOG v1 (code thầy + TagAwareScheduler) — TẦNG CLOUD, deploy trên EC2 x86_64
+#
+# Một Storm cluster DUY NHẤT trải trên 2 máy:
+#   - Máy CLOUD (file này)   : zookeeper, nimbus+UI (TagAwareScheduler),
+#                              supervisor2 (tags: cloud), mysql, storm-exporter
+#   - Máy GATEWAY            : mqtt-broker + supervisor1 (untagged)
+#                              → xem gateway/docker-compose.yaml
+#
+# Phân chia bolt (mặc định trong MainTopo, đổi bằng --cloudbolts khi submit):
+#   gateway (untagged) : spout-data, spout-trigger, split-*, avg-*
+#                        (việc nhẹ + cảnh báo thiết bị TỨC THÌ qua broker local)
+#   cloud (tags=cloud) : sum-*, forecast-*  (tổng hợp house/household, dự báo)
+#
+# Cần file .env (xem .env.example): GATEWAY_PUBLIC_IP=<IP máy gateway>
+#
+# Chạy:  docker compose up -d
+# Nộp topology (sau khi cả 2 máy đã up):
+#   docker compose run --rm topo-submit
+# ============================================================================
+
 services:
+  zookeeper:
+    image: zookeeper:3.8.5
+    container_name: zookeeper
+    hostname: zookeeper
+    networks:
+      storm_network:
+    volumes:
+      - ./storm/config/zoo.cfg:/conf/zoo.cfg
+    ports:
+      - 2181:2181
+    restart: always
+
+  nimbus:
+    image: storm:2.1.0
+    container_name: nimbus
+    hostname: nimbus
+    command: sh -c "storm nimbus & storm ui"
+    volumes:
+      - ./storm/config/nimbus.yaml:/conf/storm.yaml
+      - ../gateway/tagawarescheduler/target/tagawarescheduler-1.0.jar:/apache-storm-2.1.0/lib/tagawarescheduler-1.0.jar
+      - ../gateway/target/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar:/apache-storm-2.1.0/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar
+    ports:
+      - 8080:8080   # Storm UI
+      - 6627:6627   # Nimbus Thrift
+    restart: always
+    networks:
+      storm_network:
+    extra_hosts:
+      - "supervisor1:${GATEWAY_PUBLIC_IP}"
+      - "mqtt-broker:${GATEWAY_PUBLIC_IP}"
+    depends_on:
+      - zookeeper
+
+  # Supervisor tầng cloud — TagAwareScheduler xếp các bolt có tags=cloud vào đây
   supervisor2:
     image: storm:2.1.0
     container_name: supervisor2
     hostname: supervisor2
     command: storm supervisor
+    depends_on:
+      - nimbus
+      - zookeeper
+    restart: always
     volumes:
       - ./storm/config/supervisor.yaml:/conf/storm.yaml
     ports:
       - 6700-6703:6700-6703
+    extra_hosts:
+      - "supervisor1:${GATEWAY_PUBLIC_IP}"
+      - "mqtt-broker:${GATEWAY_PUBLIC_IP}"
     networks:
       storm_network:
-    extra_hosts:
-      - "zookeeper:13.250.96.226"
-      - "nimbus:13.250.96.226"
-      - "mqtt-broker:13.250.96.226"
-      - "supervisor1:13.250.96.226"
 
   mysql:
     image: mysql:8.4.2
@@ -36,24 +93,49 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    restart: always
 
-  webapp:
-    image: iot-data-api:v1
-    container_name: iot-data-api
-    pull_policy: never
+  # Nộp topology một lần rồi thoát. Đổi phân chia bolt bằng CLOUD_BOLTS,
+  # ví dụ CLOUD_BOLTS="sum,forecast,avg-60,avg-120" docker compose run --rm topo-submit
+  topo-submit:
+    image: storm:2.1.0
+    container_name: topo-submit
+    profiles: ["submit"]
     networks:
       storm_network:
-    ports:
-      - 9000:9000
     volumes:
-      - ./webapp/cred.json:/opt/app/cred.json
+      - ./storm/config/nimbus.yaml:/conf/storm.yaml
+      - ../gateway/target/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar:/opt/topo.jar
+    extra_hosts:
+      - "mqtt-broker:${GATEWAY_PUBLIC_IP}"
+    environment:
+      CLOUD_BOLTS: ${CLOUD_BOLTS:-sum,forecast}
+    command: >
+      sh -c "
+        storm jar /opt/topo.jar com.storm.iotdata.MainTopo -c \"$${CLOUD_BOLTS}\" &&
+        echo '[submit] Topology iot-smarthome da duoc nop.'
+      "
     depends_on:
       mysql:
         condition: service_healthy
-    restart: always
-    extra_hosts:
-      - "mqtt-broker:13.250.96.226"
-      
+    restart: "no"
+
+  # Metrics cho Prometheus (cùng exporter với hệ Monolithic → so sánh công bằng)
+  storm-exporter:
+    image: mr4x2/stormexporter:v1.2.2
+    container_name: storm-exporter
+    networks:
+      storm_network:
+    environment:
+      - STORM_UI_HOST=nimbus:8080
+      - PORT_EXPOSE=8000
+      - REFRESH_RATE=5
+    ports:
+      - 8000:8000
+    depends_on:
+      - nimbus
+    restart: unless-stopped
+
 networks:
   storm_network:
     driver: bridge

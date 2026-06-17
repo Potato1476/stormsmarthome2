@@ -1,0 +1,203 @@
+# ============================================================================
+# CLOUD TIER  —  deploy on AWS EC2
+#
+# Đây là tầng Cloud của mô hình Fog. Chạy trên 1 EC2 (t3.large, x86_64 —
+# vì image storm:2.1.0 và stormexporter chỉ có bản amd64).
+# Bao gồm:
+#   - cloud-mqtt        : broker nhận dữ liệu thô (từ publisher) VÀ kết quả
+#                         tổng hợp (từ các gateway/Pi)
+#   - cloud-mysql       : lưu bảng fog_* (kết quả cuối)
+#   - cloud-zookeeper   : điều phối Storm
+#   - cloud-nimbus      : Storm Nimbus + Storm UI (cổng 8080)
+#   - cloud-supervisor  : Storm worker (chạy Bolt_cloudMerge)
+#   - cloud-topo-submit : nộp topology fog-cloud một lần rồi thoát
+#   - cloud-storm-exporter : xuất metrics Storm cho Prometheus (cổng 8000)
+#   - iot-data-api          : Web dashboard người dùng (cổng 9000)
+# Gateway chạy ở docker-compose.gateway.yml
+# (giả lập Pi trên máy local). Cũng KHÔNG có Prometheus/Grafana ở đây —
+# monitoring chạy cùng phía gateway (local) vì máy local mới với tới được
+# cả gateway (localhost) lẫn Cloud (public IP).
+#
+# Chạy trên EC2:
+#   docker compose -f docker-compose.cloud.yml --env-file .env.cloud up -d
+# ============================================================================
+
+version: '3.8'
+
+services:
+
+  # ── Cloud MQTT Broker ────────────────────────────────────────────────────────
+  cloud-mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: cloud-mqtt
+    networks:
+      - fog_net
+    ports:
+      - "1883:1883"   # publisher + các Pi kết nối tới <CLOUD_PUBLIC_IP>:1883
+    volumes:
+      - ./fog-cloud/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+
+  # ── Cloud MySQL ──────────────────────────────────────────────────────────────
+  cloud-mysql:
+    image: mysql:8.4.2
+    container_name: cloud-mysql
+    networks:
+      - fog_net
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Uet123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-iotdata_fog}
+      MYSQL_USER: ${MYSQL_USER:-user1}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-Uet123}
+    ports:
+      - "3306:3306"
+    volumes:
+      - fog_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pUet123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Cloud Storm: ZooKeeper ───────────────────────────────────────────────────
+  cloud-zookeeper:
+    image: zookeeper:3.8.5
+    container_name: cloud-zookeeper
+    hostname: cloud-zookeeper
+    networks:
+      - fog_net
+    volumes:
+      - ./fog-cloud/storm/config/zoo.cfg:/conf/zoo.cfg
+    ports:
+      - "2181:2181"
+    restart: unless-stopped
+
+  # ── Cloud Storm: Nimbus + UI ─────────────────────────────────────────────────
+  cloud-nimbus:
+    image: storm:2.1.0
+    container_name: cloud-nimbus
+    hostname: cloud-nimbus
+    command: sh -c "storm nimbus & storm ui"
+    networks:
+      - fog_net
+    volumes:
+      - ./fog-cloud/storm/config/nimbus.yaml:/conf/storm.yaml
+      - ./fog-cloud/tagawarescheduler/target/tagawarescheduler-1.0.jar:/apache-storm-2.1.0/lib/tagawarescheduler-1.0.jar
+      - ./fog-cloud/target/fog-cloud-1.0-jar-with-dependencies.jar:/opt/fog-cloud.jar
+    ports:
+      - "8080:8080"   # Storm UI
+      - "6627:6627"   # Nimbus Thrift
+    depends_on:
+      - cloud-zookeeper
+    restart: always
+
+  # ── Cloud Storm: Supervisor ──────────────────────────────────────────────────
+  cloud-supervisor:
+    image: storm:2.1.0
+    container_name: cloud-supervisor
+    hostname: cloud-supervisor
+    command: storm supervisor
+    networks:
+      - fog_net
+    volumes:
+      - ./fog-cloud/storm/config/supervisor.yaml:/conf/storm.yaml
+    ports:
+      - "6700-6703:6700-6703"
+    depends_on:
+      - cloud-nimbus
+      - cloud-zookeeper
+    restart: always
+
+  # ── Topology Submission ──────────────────────────────────────────────────────
+  # Một-lần: chờ Nimbus, nộp topology fog-cloud, rồi thoát (không restart).
+  cloud-topo-submit:
+    image: storm:2.1.0
+    container_name: cloud-topo-submit
+    networks:
+      - fog_net
+    volumes:
+      - ./fog-cloud/target/fog-cloud-1.0-jar-with-dependencies.jar:/opt/fog-cloud.jar
+      - ./fog-cloud/storm/config/nimbus.yaml:/conf/storm.yaml
+    environment:
+      CLOUD_MQTT_HOST: cloud-mqtt
+      CLOUD_MQTT_PORT: "1883"
+      DB_HOST: cloud-mysql
+      DB_NAME: ${MYSQL_DATABASE:-iotdata_fog}
+      DB_USER: ${MYSQL_USER:-user1}
+      DB_PASS: ${MYSQL_PASSWORD:-Uet123}
+      FLUSH_INTERVAL_SEC: ${FLUSH_INTERVAL_SEC:-60}
+      TOPOLOGY_NAME: fog-cloud
+      # ─ Alert thresholds (truyền vào Bolt_cloudMerge) ─────────────────────
+      ALERT_DEVICE_MAX_W:  ${ALERT_DEVICE_MAX_W:-2000}
+      ALERT_HOUSE_MAX_W:   ${ALERT_HOUSE_MAX_W:-20000}
+      ALERT_COOLDOWN_SEC:  ${ALERT_COOLDOWN_SEC:-60}
+      ALERT_WINDOW_MIN:    ${ALERT_WINDOW_MIN:-5}
+      ALERT_MQTT_TOPIC:    iot-notification
+    command: >
+      sh -c "
+        echo '[submit] Chờ 60s cho Nimbus và ZK sẵn sàng...' &&
+        sleep 60 &&
+        storm jar /opt/fog-cloud.jar com.storm.iotdata.fog.CloudMainTopo &&
+        echo '[submit] Đã nộp topology thành công.'
+      "
+    depends_on:
+      - cloud-nimbus
+      - cloud-supervisor
+      - cloud-mysql
+    restart: "no"
+
+
+  # ── Storm Exporter (metrics tầng Cloud cho Prometheus) ───────────────────────
+  # Mở cổng 8000 ra ngoài để Prometheus phía local (gateway) scrape được.
+  cloud-storm-exporter:
+    image: mr4x2/stormexporter:v1.2.2
+    container_name: cloud-storm-exporter
+    networks:
+      - fog_net
+    environment:
+      - STORM_UI_HOST=cloud-nimbus:8080
+      - PORT_EXPOSE=8000
+      - REFRESH_RATE=5
+    ports:
+      - "8000:8000"
+    depends_on:
+      - cloud-nimbus
+    restart: unless-stopped
+
+  # ── Web Dashboard ───────────────────────────────────────────────────────────────
+  # Truy cập: http://<CLOUD_IP>:9000
+  # (Cảnh báo Slack đã chuyển sang tầng Gateway — xem RUNBOOK_ALERTS.md.)
+  iot-data-api:
+    build:
+      context: ./cloud/webapp/iot-data-api
+      dockerfile: Dockerfile
+    container_name: iot-data-api
+    networks:
+      - fog_net
+    ports:
+      - "9000:9000"
+    environment:
+      # ─ Database ──────────────────────────────────────────────────
+      DB_HOST: cloud-mysql
+      DB_PORT: "3306"
+      DB_NAME: ${MYSQL_DATABASE:-iotdata_fog}
+      DB_USER: ${MYSQL_USER:-user1}
+      DB_PASS: ${MYSQL_PASSWORD:-Uet123}
+      # ─ MQTT (nhận notification từ broker cloud) ─────────────────────────
+      MQTT_BROKER_HOST: cloud-mqtt
+      MQTT_BROKER_PORT: "1883"
+    depends_on:
+      cloud-mysql:
+        condition: service_healthy
+      cloud-mqtt:
+        condition: service_started
+    restart: unless-stopped
+
+networks:
+  fog_net:
+    driver: bridge
+
+volumes:
+  fog_mysql_data:

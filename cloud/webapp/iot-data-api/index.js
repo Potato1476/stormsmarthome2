@@ -1,19 +1,26 @@
 const express = require('express');
+const http_module = require('http');
 const iot_data = require('./iot_data').iot_data;
 var sql = require('./iot-db');
 var last_spout_log;
 var last_storm_log;
+
+// NOTE: Slack alerting was moved to the Gateway tier (fog-gateway Bolt_ingest →
+// SlackNotifier), which detects anomalies on raw readings at the edge. The Cloud
+// no longer sends Slack alerts — see RUNBOOK_ALERTS.md. The dashboard still shows
+// the Cloud's own notification feed over websockets (below).
 
 const app = express()
 const port = 9000
 var prefix = "";
 
 app.use(express.static('public'))
+app.use(express.json())
 
 app.get('/api/query', (req, res) => {
     let queryParams = req.query;
     sql.query(new iot_data(queryParams.house_id, queryParams.household_id, queryParams.device_id, queryParams.year, queryParams.month, queryParams.day, queryParams.slice_gap, queryParams.slice_index), (err, result) => {
-        if (err) res.status(500).send('Server error but it must be your fault');
+        if (err) res.status(500).json({ error: 'Database query failed' });
         else res.json(result);
     });
 });
@@ -86,7 +93,8 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/public/index.html');
 });
 
-// Socket IO listen
+
+
 const server = require('http').createServer(app);
 const io = require('socket.io')(server, {
     cors: {
@@ -136,7 +144,10 @@ io.on('connection', client => {
 
 // MQTT notification connect
 var mqtt = require('mqtt');
-var mqttclient = mqtt.connect('mqtt://mqtt-broker:1883')
+const mqttHost = process.env.MQTT_BROKER_HOST || 'mqtt-broker';
+const mqttPort = process.env.MQTT_BROKER_PORT || '1883';
+var mqttclient = mqtt.connect(`mqtt://${mqttHost}:${mqttPort}`);
+console.log(`[MQTT] Connecting to ${mqttHost}:${mqttPort}...`);
 
 mqttclient.on('connect', function () {
     mqttclient.subscribe(prefix + 'iot-notification', function (err) {
@@ -156,19 +167,22 @@ mqttclient.on('connect', function () {
     })
     mqttclient.on('message', function (topic, message) {
         // message is Buffer
+        const msgStr = message.toString();
         switch(topic){
             case `${prefix}storm-log`:
-                last_storm_log = message.toString();
-                io.to('storm-log').emit('log', message.toString());
+                last_storm_log = msgStr;
+                io.to('storm-log').emit('log', msgStr);
                 break;
             case `${prefix}spout-log`:
-                last_spout_log = message.toString();
-                io.to('spout-log').emit('spout', message.toString());
+                last_spout_log = msgStr;
+                io.to('spout-log').emit('spout', msgStr);
                 break;
             default:
-                io.to(topic).emit('notification', message.toString());
+                io.to(topic).emit('notification', msgStr);
         }
     });
 })
 
-server.listen(port, () => console.log(`Web app listening on port ${port}!`))
+server.listen(port, () => {
+    console.log(`Web app listening on port ${port}!`);
+})

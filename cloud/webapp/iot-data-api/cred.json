@@ -1,0 +1,7 @@
+{
+    "db_url": "${DB_HOST:-cloud-mysql}",
+    "db_port": "${DB_PORT:-3306}",
+    "db_user": "${DB_USER:-user1}",
+    "db_pass": "${DB_PASS:-Uet123}",
+    "db_name": "${DB_NAME:-iotdata_fog}"
+}

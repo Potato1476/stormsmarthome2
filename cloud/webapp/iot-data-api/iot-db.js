@@ -147,88 +147,67 @@ try{
         }
     }
     
+    // ── Forecast: historical daily-profile baseline ────────────────────────────
+    // We predict the consumption at each time-of-day slice as the MEAN observed at
+    // that same slice across all available days (a seasonal-naive forecaster), and
+    // overlay it on the actual series so deviations (anomalies) are obvious.
+    //
+    // Computed live from the fog_* actual tables — no separate forecast table or
+    // batch job needed. The `version` arg is accepted for API back-compat but
+    // ignored. Build two filters: the inner profile averages over ALL days (drop
+    // the day filter) while the outer returns one row per actual (day, slice).
+    function fogFilter(iot_data, prefix, includeDay){
+        let s = '';
+        if(iot_data.house_id!=undefined && iot_data.house_id!=null && iot_data.house_id!=='*') s+=`AND ${prefix}houseId=${iot_data.house_id} `;
+        if(iot_data.household_id!=undefined && iot_data.household_id!=null && iot_data.household_id!=='*') s+=`AND ${prefix}householdId=${iot_data.household_id} `;
+        if(iot_data.device_id!=undefined && iot_data.device_id!=null && iot_data.device_id!=='*') s+=`AND ${prefix}deviceId=${iot_data.device_id} `;
+        if(iot_data.year!=undefined && iot_data.year!=null) s+=`AND ${prefix}year='${iot_data.year}' `;
+        if(iot_data.month!=undefined && iot_data.month!=null) s+=`AND ${prefix}month='${iot_data.month}' `;
+        if(includeDay && iot_data.day!=undefined && iot_data.day!=null) s+=`AND ${prefix}day='${iot_data.day}' `;
+        if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) s+=`AND ${prefix}sliceGap=${iot_data.slice_gap} `;
+        if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) s+=`AND ${prefix}sliceIndex=${iot_data.slice_index} `;
+        return s;
+    }
+
     function queryforecast(iot_data, version, callback) {
+        let table, groupCols, outerCols, build;
         if(iot_data.household_id==="*" || !iot_data.household_id){
-            let sql = `SELECT * FROM house_data_forecast_${version} WHERE `;
-            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`house_id=${iot_data.house_id} AND `;
-            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`year=${iot_data.year} AND `;
-            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`month=${iot_data.month} AND `;
-            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`day=${iot_data.day} AND `;
-            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`slice_gap=${iot_data.slice_gap} AND `;
-            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
-            con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
-                if (err) {
-                    console.log('[queryforecast] house:', err.message || err);
-                    return callback(err, null);
-                }
-                if(result){
-                    var house_datas = {};
-                    result.forEach((ele,i,arr) => {
-                        let temp = new house_data(ele.house_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
-                        house_datas[temp.getUniqueID()] = temp;
-                    });
-                    callback(null, house_datas);
-                }
-                else {
-                    callback(null, null);
-                }
-            });
+            table = 'fog_house_data';
+            groupCols = 'houseId, sliceGap, sliceIndex';
+            outerCols = 'a.houseId AS house_id, a.year, a.month, a.day, a.sliceGap AS slice_gap, a.sliceIndex AS slice_index';
+            build = (e)=> new house_data(e.house_id, e.year, e.month, e.day, e.slice_gap, e.slice_index, e.avg);
+        } else if(iot_data.device_id==="*" || !iot_data.device_id){
+            table = 'fog_household_data';
+            groupCols = 'houseId, householdId, sliceGap, sliceIndex';
+            outerCols = 'a.houseId AS house_id, a.householdId AS household_id, a.year, a.month, a.day, a.sliceGap AS slice_gap, a.sliceIndex AS slice_index';
+            build = (e)=> new household_data(e.house_id, e.household_id, e.year, e.month, e.day, e.slice_gap, e.slice_index, e.avg);
+        } else {
+            table = 'fog_device_data';
+            groupCols = 'houseId, householdId, deviceId, sliceGap, sliceIndex';
+            outerCols = 'a.houseId AS house_id, a.householdId AS household_id, a.deviceId AS device_id, a.year, a.month, a.day, a.sliceGap AS slice_gap, a.sliceIndex AS slice_index';
+            build = (e)=> new device_data(e.house_id, e.household_id, e.device_id, e.year, e.month, e.day, e.slice_gap, e.slice_index, e.avg);
         }
-        else if(iot_data.device_id==="*" || !iot_data.device_id){
-            let sql = `SELECT * FROM household_data_forecast_${version} WHERE `;
-            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`house_id=${iot_data.house_id} AND `;
-            if(iot_data.household_id!=undefined && iot_data.household_id!=null) sql+=`household_id=${iot_data.household_id} AND `;
-            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`year=${iot_data.year} AND `;
-            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`month=${iot_data.month} AND `;
-            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`day=${iot_data.day} AND `;
-            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`slice_gap=${iot_data.slice_gap} AND `;
-            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
-            con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
-                if (err) {
-                    console.log('[queryforecast] household:', err.message || err);
-                    return callback(err, null);
-                }
-                if(result){
-                    var household_datas = {};
-                    result.forEach((ele,i,arr) => {
-                        let temp = new household_data(ele.house_id, ele.household_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
-                        household_datas[temp.getUniqueID()] = temp;
-                    });
-                    callback(null, household_datas);
-                }
-                else {
-                    callback(null, null);
-                }
+        // Join key = the grouping columns (alias a.* to p.*)
+        const joinOn = groupCols.split(',').map(c=>c.trim()).map(c=>`a.${c}=p.${c}`).join(' AND ');
+        const sql =
+            `SELECT ${outerCols}, p.profile_avg AS avg ` +
+            `FROM ${table} a ` +
+            `JOIN (SELECT ${groupCols}, AVG(IF(count>0, sumValue/count, 0)) AS profile_avg ` +
+            `      FROM ${table} WHERE 1=1 ${fogFilter(iot_data,'',false)} GROUP BY ${groupCols}) p ` +
+            `ON ${joinOn} ` +
+            `WHERE 1=1 ${fogFilter(iot_data,'a.',true)}`;
+        con.query(sql, function (err, result) {
+            if (err) {
+                console.log('[queryforecast]', err.message || err);
+                return callback(err, {});
+            }
+            var out = {};
+            if(result) result.forEach((ele) => {
+                let temp = build(ele);
+                out[temp.getUniqueID()] = temp;
             });
-        }
-        else{
-            let sql = `SELECT * FROM device_data_forecast_${version} WHERE `;
-            if(iot_data.house_id!=undefined && iot_data.house_id!=null) sql+=`house_id=${iot_data.house_id} AND `;
-            if(iot_data.household_id!=undefined && iot_data.household_id!=null) sql+=`household_id=${iot_data.household_id} AND `;
-            if(iot_data.device_id!=undefined && iot_data.device_id!=null) sql+=`device_id=${iot_data.device_id} AND `;
-            if(iot_data.year!=undefined && iot_data.year!=null) sql+=`year=${iot_data.year} AND `;
-            if(iot_data.month!=undefined && iot_data.month!=null) sql+=`month=${iot_data.month} AND `;
-            if(iot_data.day!=undefined && iot_data.day!=null) sql+=`day=${iot_data.day} AND `;
-            if(iot_data.slice_gap!=undefined && iot_data.slice_gap!=null) sql+=`slice_gap=${iot_data.slice_gap} AND `;
-            if(iot_data.slice_index!=undefined && iot_data.slice_index!=null) sql+=`slice_index=${iot_data.slice_index} AND `;
-            con.query(sql.substring(0,sql.length-4), function (err, result, fields) {
-                if (err) {
-                    console.log('[queryforecast] device:', err.message || err);
-                    return callback(err, {});
-                }
-                if(result){
-                    var device_datas = {};
-                    result.forEach((ele,i,arr) => {
-                        let temp = new device_data(ele.house_id, ele.household_id, ele.device_id, ele.year, ele.month, ele.day, ele.slice_gap, ele.slice_index, ele.avg);
-                        device_datas[temp.getUniqueID()] = temp;
-                    });
-                    callback(null, device_datas);
-                }
-                else{
-                    callback(null, {});
-                }
-            });
-        }
+            callback(null, out);
+        });
     }
 
     function queryforecastbyweek(iot_data, week , version, callback) {

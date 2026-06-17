@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -99,28 +99,6 @@
             color: var(--text-muted); text-transform: uppercase;
             padding: 16px 12px 6px;
         }
-
-        .slack-status {
-            margin-top: auto; padding: 12px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 12px; border: 1px solid var(--border-soft);
-        }
-        .slack-status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-        .slack-badge {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
-        }
-        .slack-badge.on  { background: rgba(16,185,129,0.15); color: var(--accent-emerald); border: 1px solid rgba(16,185,129,0.3); }
-        .slack-badge.off { background: rgba(244,63,94,0.12); color: var(--accent-rose); border: 1px solid rgba(244,63,94,0.25); }
-        .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse-dot 2s infinite; }
-        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .btn-test-slack {
-            width: 100%; padding: 7px; border-radius: 8px; font-size: 11px; font-weight: 600;
-            background: rgba(139,92,246,0.15); color: var(--accent-violet);
-            border: 1px solid rgba(139,92,246,0.25); cursor: pointer;
-            transition: all 0.2s; font-family: inherit;
-        }
-        .btn-test-slack:hover { background: rgba(139,92,246,0.25); }
 
         /* ── Main Content ── */
         .main {
@@ -245,7 +223,6 @@
         .noti-title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
         .noti-desc  { font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
         .noti-time  { font-size: 10px; color: var(--text-muted); margin-top: 5px; }
-        .noti-slack { font-size: 10px; color: var(--accent-violet); margin-top: 2px; }
 
         /* ── Storm Log (col-span-8, row-span-3) ── */
         .log-card { grid-column: span 8; grid-row: span 3; }
@@ -272,21 +249,6 @@
         .spout-metric-val { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; }
         .spout-metric-key { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; margin-top: 2px; }
 
-        /* ── Slack Config Card ── */
-        .slack-card { grid-column: span 12; grid-row: span 2; }
-        .slack-card-inner { display: flex; align-items: center; gap: 20px; height: 100%; }
-        .slack-logo { font-size: 36px; flex-shrink: 0; }
-        .slack-info { flex: 1; }
-        .slack-title { font-weight: 700; font-size: 15px; margin-bottom: 3px; }
-        .slack-desc { font-size: 12px; color: var(--text-secondary); }
-        .slack-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
-        .slack-webhook-input {
-            background: rgba(0,0,0,0.4); border: 1px solid var(--border-soft);
-            border-radius: 8px; padding: 8px 12px; color: var(--text-primary);
-            font-size: 12px; font-family: inherit; width: 340px; outline: none;
-            transition: border-color 0.2s;
-        }
-        .slack-webhook-input:focus { border-color: rgba(139,92,246,0.5); }
         .btn {
             padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
             cursor: pointer; transition: all 0.2s; font-family: inherit; border: none;
@@ -337,13 +299,10 @@
             .sidebar { display: none; }
             .main { margin-left: 0; padding: 16px; }
             .bento { grid-template-columns: 1fr; grid-auto-rows: auto; gap: 12px; }
-            .kpi-card, .chart-main, .noti-panel, .log-card, .spout-card, .slack-card { grid-column: span 1; grid-row: span 1; }
+            .kpi-card, .chart-main, .noti-panel, .log-card, .spout-card { grid-column: span 1; grid-row: span 1; }
             .chart-main { min-height: 300px; }
             .noti-panel { min-height: 280px; }
             .log-card   { min-height: 200px; }
-            .slack-card-inner { flex-direction: column; align-items: flex-start; }
-            .slack-webhook-input { width: 100%; }
-            .slack-actions { flex-direction: column; width: 100%; }
         }
     </style>
 </head>
@@ -377,19 +336,6 @@
     <a class="nav-item" href="http://localhost:3000" target="_blank">
         <span class="nav-icon">📉</span> Grafana
     </a>
-
-    <!-- Slack Quick Status -->
-    <div class="slack-status">
-        <div class="slack-status-row">
-            <span style="font-size:16px">💬</span>
-            <span style="font-size:12px; font-weight:600;">Slack Alerts</span>
-        </div>
-        <span id="sidebar-slack-badge" class="slack-badge off">
-            <span class="dot"></span> Loading...
-        </span>
-        <br><br>
-        <button class="btn-test-slack" onclick="testSlack()">🧪 Send Test Alert</button>
-    </div>
 </nav>
 
 <!-- ── Toast Container ── -->
@@ -433,6 +379,7 @@
                     <option value="*">All Days</option>
                 </select>
             </div>
+            <button id="btn-refresh" onclick="loadChart()" title="Refresh chart data" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.35);color:#a78bfa;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;">&#8635; Refresh</button>
         </div>
     </div>
 
@@ -538,25 +485,6 @@
                 <div class="spout-metric">
                     <div class="spout-metric-val" id="spout-success" style="color:var(--accent-emerald)">—</div>
                     <div class="spout-metric-key">Success</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Slack Config Card -->
-        <div class="card slack-card">
-            <div class="slack-card-inner">
-                <div class="slack-logo">💬</div>
-                <div class="slack-info">
-                    <div class="slack-title">Slack Alert Integration</div>
-                    <div class="slack-desc">Nhận cảnh báo overload tức thì qua Slack khi thiết bị vượt ngưỡng tiêu thụ điện. Sử dụng Incoming Webhook từ Slack App.</div>
-                </div>
-                <div class="slack-actions">
-                    <input type="text" class="slack-webhook-input" id="slack-webhook-input"
-                        placeholder="https://hooks.slack.com/services/xxx/yyy/zzz"
-                        title="Paste Slack Incoming Webhook URL here">
-                    <button class="btn btn-primary" onclick="saveSlackWebhook()">💾 Save</button>
-                    <button class="btn btn-danger" onclick="testSlack()">🧪 Test</button>
-                    <button class="btn btn-secondary" onclick="window.open('https://api.slack.com/messaging/webhooks','_blank')" style="font-size:11px">📖 Guide</button>
                 </div>
             </div>
         </div>
@@ -669,7 +597,6 @@ function renderNotification(data) {
             <div class="noti-title">${t.label} — ${level === 'device' ? 'House ' + noti.houseId + ' / Device ' + noti.deviceId : 'House ' + noti.houseId}</div>
             <div class="noti-desc">Current: <strong>${val}</strong> · Threshold: ${max}</div>
             <div class="noti-time">${new Date().toLocaleTimeString('vi-VN')}</div>
-            <div class="noti-slack" id="slack-sent-${Date.now()}"></div>
         `;
         list.prepend(item);
         if (list.children.length > NOTI_MAX) list.removeChild(list.lastChild);
@@ -860,6 +787,10 @@ function loadMeta() {
             });
             populateDays();
             setLastUpdate('Metadata loaded · ' + houses.length + ' houses');
+            if (houses.length > 0) {
+                if (!houseSelect.value) houseSelect.value = houses[0];
+                onHouseChange();
+            }
         })
         .catch(e => { setLastUpdate('⚠️ DB not connected — topology not running?'); });
 }
@@ -914,54 +845,6 @@ function populateDays(houseId) {
     });
 }
 
-// ── Slack Integration ─────────────────────────────────────────────────────────
-function loadSlackStatus() {
-    fetch('/api/slack-config')
-        .then(r => r.json())
-        .then(cfg => {
-            const badge = document.getElementById('sidebar-slack-badge');
-            const input = document.getElementById('slack-webhook-input');
-            if (cfg.enabled) {
-                badge.className = 'slack-badge on';
-                badge.innerHTML = '<span class="dot"></span> Active';
-            } else {
-                badge.className = 'slack-badge off';
-                badge.innerHTML = '<span class="dot"></span> Disabled';
-            }
-            if (cfg.hasWebhook) input.value = '••••••••••••••••••••••••••••••••••••• (set)';
-        })
-        .catch(() => {});
-}
-
-function saveSlackWebhook() {
-    const url = document.getElementById('slack-webhook-input').value.trim();
-    if (url.startsWith('•')) { showToast('Webhook already set. Clear and re-enter to change.', 'info'); return; }
-    if (!url.startsWith('https://hooks.slack.com/')) {
-        showToast('Invalid URL. Must start with https://hooks.slack.com/', 'error'); return;
-    }
-    fetch('/api/slack-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webhookUrl: url })
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (res.success) { showToast('✅ Slack webhook saved!', 'success'); loadSlackStatus(); }
-        else showToast('Failed to save', 'error');
-    })
-    .catch(() => showToast('Server error', 'error'));
-}
-
-function testSlack() {
-    fetch('/api/test-slack', { method: 'POST' })
-        .then(r => r.json())
-        .then(res => {
-            if (res.success) showToast('🧪 Test alert sent to Slack!', 'success');
-            else showToast('❌ ' + (res.error || 'Slack not configured'), 'error');
-        })
-        .catch(() => showToast('Server error while testing Slack', 'error'));
-}
-
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function setLastUpdate(msg) {
     document.getElementById('last-update').textContent = msg;
@@ -987,9 +870,12 @@ function showToast(msg, type = 'info') {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    initChart();
+    try { initChart(); }
+    catch (e) {
+        console.error('Chart init failed (Chart.js not loaded?):', e);
+        document.getElementById('chart-loading').innerHTML = '⚠️ Chart library failed to load';
+    }
     loadMeta();
-    loadSlackStatus();
     // Show empty state if no noti yet
     ['device','household','house'].forEach(t => {
         const list = document.getElementById(`noti-list-${t}`);
