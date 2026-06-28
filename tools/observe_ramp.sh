@@ -16,7 +16,7 @@ set -euo pipefail
 ENV="${ENV:?Cần ENV=A hoặc ENV=B}"
 CLOUD_IP="${CLOUD_IP:-}"; KEY="${KEY:-}"
 HOUSES="${HOUSES:-1 5 10 20 40}"
-STEP_DUR="${STEP_DUR:-300}"
+STEP_DUR="${STEP_DUR:-360}"
 PROM="${PROM:-http://localhost:9090}"
 COMPOSE="${COMPOSE:-docker-compose.gateway.yml}"
 GRAFANA="${GRAFANA:-http://localhost:3000}"
@@ -132,7 +132,7 @@ PY
 done
 
 T_END_MS=$(($(date +%s)*1000))
-IMGDIR="$OUT_DIR/img/kb1-${ENVNAME}"; mkdir -p "$IMGDIR"
+IMGDIR="$OUT_DIR/img"; mkdir -p "$IMGDIR"
 
 echo ""
 echo "════════════════════════════════════════════════════════════════"

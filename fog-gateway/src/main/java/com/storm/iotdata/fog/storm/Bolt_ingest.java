@@ -10,6 +10,7 @@ import com.storm.iotdata.fog.anomaly.AnomalyResult;
 import com.storm.iotdata.fog.metrics.PrometheusMetricsServer;
 import com.storm.iotdata.fog.models.AggregatedBatch;
 import com.storm.iotdata.fog.models.AggregatedRecord;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -45,6 +46,10 @@ import java.util.zip.GZIPOutputStream;
 public class Bolt_ingest extends BaseRichBolt {
 
     private static final long CLEAN_THRESHOLD_MS = 3L * 60 * 60 * 1000; // 3 h
+    // Shared across prepare() re-invocations (Storm rebalance/restart within same JVM)
+    // so metrics counters survive topology restarts and port-already-in-use errors.
+    private static final ConcurrentHashMap<String, PrometheusMetricsServer> METRIC_REGISTRY =
+        new ConcurrentHashMap<>();
 
     private final GatewayConfig config;
     private transient OutputCollector collector;
@@ -55,6 +60,8 @@ public class Bolt_ingest extends BaseRichBolt {
     private final Map<Integer, Map<String, double[]>> accumulators = new HashMap<>();
     // windowMin -> (deviceSliceKey -> lastUpdateMs)
     private final Map<Integer, Map<String, Long>> lastUpdate = new HashMap<>();
+    // [metrics] windowMin -> (deviceSliceKey -> max produced epoch-ms) for end-to-end latency
+    private final Map<Integer, Map<String, Long>> eventTsAcc = new HashMap<>();
 
     private transient MqttClient cloudClient;
     private transient Gson gson;
@@ -73,6 +80,7 @@ public class Bolt_ingest extends BaseRichBolt {
         for (int w : config.getWindowList()) {
             accumulators.put(w, new HashMap<>());
             lastUpdate.put(w, new HashMap<>());
+            eventTsAcc.put(w, new HashMap<>());
         }
     }
 
@@ -80,11 +88,14 @@ public class Bolt_ingest extends BaseRichBolt {
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
         this.collector = collector;
         this.gson = new Gson();
-        try {
-            metrics = new PrometheusMetricsServer(config.getMetricsPort(), config.getGatewayId());
-        } catch (IOException e) {
-            System.err.println("[Bolt_ingest] Failed to start metrics server: " + e.getMessage());
-        }
+        metrics = METRIC_REGISTRY.computeIfAbsent(config.getGatewayId(), id -> {
+            try {
+                return new PrometheusMetricsServer(config.getMetricsPort(), id);
+            } catch (IOException e) {
+                System.err.println("[Bolt_ingest] Failed to start metrics server: " + e.getMessage());
+                return null;
+            }
+        });
         initCloudClient();
         ensureQueueDir();
         initAlerting();
@@ -143,6 +154,7 @@ public class Bolt_ingest extends BaseRichBolt {
 
             // Logical fan-out: update all window accumulators in one pass (no tuple emission)
             long now = System.currentTimeMillis();
+            long producedMs = timestamp * 1000L; // [metrics] when the reading was produced
             for (int windowMin : config.getWindowList()) {
                 int sliceIndex = (int) (timeInDay / (windowMin * 60000L));
                 String key = houseId + ":" + householdId + ":" + plugId + ":"
@@ -152,6 +164,7 @@ public class Bolt_ingest extends BaseRichBolt {
                 acc[0]++;           // count
                 acc[1] += value;    // sum
                 lastUpdate.get(windowMin).put(key, now);
+                eventTsAcc.get(windowMin).merge(key, producedMs, Math::max); // [metrics]
             }
 
             processedInWindow++;
@@ -205,15 +218,19 @@ public class Bolt_ingest extends BaseRichBolt {
             Map<String, double[]> windowAcc = accumulators.get(windowMin);
             if (windowAcc.isEmpty()) continue;
 
+            Map<String, Long> windowEventTs = eventTsAcc.get(windowMin);
             List<AggregatedRecord> records = new ArrayList<>(windowAcc.size());
             for (Map.Entry<String, double[]> e : windowAcc.entrySet()) {
                 String[] p = e.getKey().split(":");
                 // p: houseId:householdId:plugId:year:month:day:sliceIndex
-                records.add(new AggregatedRecord(
+                AggregatedRecord rec = new AggregatedRecord(
                     Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]),
                     p[3], p[4], p[5], Integer.parseInt(p[6]),
                     e.getValue()[0], e.getValue()[1]
-                ));
+                );
+                Long ets = windowEventTs == null ? null : windowEventTs.get(e.getKey());
+                rec.eventTsMs = ets == null ? 0L : ets; // [metrics] freshest produced epoch-ms
+                records.add(rec);
             }
 
             AggregatedBatch batch = new AggregatedBatch(config.getGatewayId(), now, windowMin, records);
@@ -318,9 +335,11 @@ public class Bolt_ingest extends BaseRichBolt {
                     toRemove.add(e.getKey());
                 }
             }
+            Map<String, Long> ets = eventTsAcc.get(windowMin);
             for (String k : toRemove) {
                 acc.remove(k);
                 lu.remove(k);
+                if (ets != null) ets.remove(k);
             }
         }
     }

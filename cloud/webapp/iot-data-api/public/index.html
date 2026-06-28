@@ -330,7 +330,7 @@
     </a>
 
     <div class="sidebar-section-label">System</div>
-    <a class="nav-item" href="http://localhost:8080" target="_blank">
+    <a class="nav-item" href="http://52.74.153.60:8080" target="_blank">
         <span class="nav-icon">⚙️</span> Storm UI
     </a>
     <a class="nav-item" href="http://localhost:3000" target="_blank">
@@ -640,7 +640,10 @@ function initChart() {
                     data: [], fill: true,
                     borderColor: 'rgba(139,92,246,0.9)',
                     backgroundColor: (ctx) => {
-                        const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+                        const chart = ctx.chart;
+                        const {ctx: c, chartArea} = chart;
+                        if (!chartArea) return 'rgba(139,92,246,0.15)';
+                        const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
                         g.addColorStop(0, 'rgba(139,92,246,0.25)');
                         g.addColorStop(1, 'rgba(139,92,246,0.01)');
                         return g;
@@ -797,7 +800,18 @@ function loadMeta() {
 
 function onHouseChange() {
     const houseId = document.getElementById('house').value;
-    if (!houseId || !metaData) return;
+    if (!houseId) {
+        chartInstance.data.labels = [];
+        chartInstance.data.datasets[0].data = [];
+        chartInstance.data.datasets[1].data = [];
+        chartInstance.update();
+        document.getElementById('kpi-val-power').textContent = '—';
+        document.getElementById('chart-desc').textContent = 'Select a house to view data';
+        document.getElementById('chart-loading').style.display = 'flex';
+        document.getElementById('chart-loading').innerHTML = '<div class="spinner"></div> Waiting for house selection...';
+        return;
+    }
+    if (!metaData) return;
 
     // Populate households
     const hhSelect = document.getElementById('household');
@@ -857,6 +871,33 @@ function clearLog() {
 function setView(v) {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     event.currentTarget.classList.add('active');
+
+    const chartMain  = document.querySelector('.chart-main');
+    const notiPanel  = document.querySelector('.noti-panel');
+    const logCard    = document.querySelector('.log-card');
+    const spoutCard  = document.querySelector('.spout-card');
+    const pageTitle  = document.querySelector('.page-title');
+
+    if (v === 'dashboard') {
+        chartMain.style.display = '';
+        notiPanel.style.display = '';
+        logCard.style.display   = '';
+        spoutCard.style.display = '';
+        pageTitle.textContent   = 'Energy Dashboard';
+    } else if (v === 'chart') {
+        chartMain.style.display = '';
+        notiPanel.style.display = 'none';
+        logCard.style.display   = 'none';
+        spoutCard.style.display = 'none';
+        pageTitle.textContent   = 'Energy Charts';
+        if (chartInstance) setTimeout(() => chartInstance.resize(), 50);
+    } else if (v === 'alerts') {
+        chartMain.style.display = 'none';
+        notiPanel.style.display = '';
+        logCard.style.display   = 'none';
+        spoutCard.style.display = 'none';
+        pageTitle.textContent   = 'Live Alerts';
+    }
 }
 
 function showToast(msg, type = 'info') {

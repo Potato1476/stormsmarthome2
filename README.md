@@ -24,8 +24,10 @@ nhất trải trên 2 máy, bolt nào gắn `tags=cloud` thì chạy ở Cloud, 
 
 | File | Nội dung |
 |---|---|
+| **[demo.sh](demo.sh)** | 🚀 **Kịch bản chạy thử & Demo nhanh** (Khuyên dùng khi thuyết trình: Bật/tắt Cloud, Gateway local, bắn data, chạy kịch bản thử nghiệm). |
 | **[PROMPTS.md](PROMPTS.md)** | ⭐ Prompt sẵn-dán vào Claude Code (VS Code): mỗi kịch bản 1 ô, Claude tự dựng + đo + xuất ảnh, bạn chỉ bắn data ở `iot-data-publisher` |
 | **[KICH_BAN_THI_NGHIEM.md](KICH_BAN_THI_NGHIEM.md)** | Chi tiết kịch bản + cách đọc số liệu: scalability ramp, Cloud Offline→Recovery, 2 môi trường giả lập (8 gateway phân tán vs 1 gateway) |
+| **[HUONG_DAN_CHAY.md](HUONG_DAN_CHAY.md)** | Hướng dẫn vận hành chi tiết bằng lệnh thủ công cho từng tầng. |
 | **[PHAN_CHIA_BOLT.md](PHAN_CHIA_BOLT.md)** | Bolt nào ở gateway / cloud, lý do, cách tinh chỉnh tag (`--cloudbolts`) |
 | **[RUNBOOK_FOG_V1.md](RUNBOOK_FOG_V1.md)** | Triển khai 2 EC2, nộp topology, đo lường, test mất mạng |
 | **[PI3_KHA_THI.md](PI3_KHA_THI.md)** | Phân tích + kịch bản đo trên Raspberry Pi 3 thật |

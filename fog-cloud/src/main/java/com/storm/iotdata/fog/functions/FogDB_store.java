@@ -47,9 +47,13 @@ public class FogDB_store {
                 "  sumValue DOUBLE DEFAULT 0," +
                 "  count DOUBLE DEFAULT 0," +
                 "  updatedAt BIGINT," +
+                "  event_ts BIGINT DEFAULT 0," +
                 "  PRIMARY KEY (houseId, householdId, deviceId, year, month, day, sliceIndex, sliceGap)" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8"
             );
+            // [metrics] ensure event_ts exists on pre-existing DBs (MySQL lacks ADD COLUMN IF NOT EXISTS)
+            try { st.executeUpdate("ALTER TABLE fog_device_data ADD COLUMN event_ts BIGINT DEFAULT 0"); }
+            catch (SQLException ignore) { /* column already present */ }
             st.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS fog_household_data (" +
                 "  houseId INT NOT NULL," +
@@ -91,11 +95,11 @@ public class FogDB_store {
      * accKey format: "houseId:householdId:plugId:year:month:day:sliceIndex"
      * acc value: double[]{count, sum}
      */
-    public void upsertDeviceData(Map<String, double[]> acc, int sliceGap) {
+    public void upsertDeviceData(Map<String, double[]> acc, Map<String, Long> eventTs, int sliceGap) {
         if (acc.isEmpty()) return;
         String sql = "REPLACE INTO fog_device_data " +
-                     "(houseId, householdId, deviceId, year, month, day, sliceIndex, sliceGap, sumValue, count, updatedAt) " +
-                     "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+                     "(houseId, householdId, deviceId, year, month, day, sliceIndex, sliceGap, sumValue, count, updatedAt, event_ts) " +
+                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
         long now = System.currentTimeMillis();
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -113,6 +117,7 @@ public class FogDB_store {
                 ps.setDouble(9, e.getValue()[1]);      // sumValue
                 ps.setDouble(10, e.getValue()[0]);     // count
                 ps.setLong(11, now);
+                ps.setLong(12, eventTs == null ? 0L : eventTs.getOrDefault(e.getKey(), 0L)); // [metrics]
                 ps.addBatch();
                 if (++batch % 500 == 0) ps.executeBatch();
             }

@@ -263,34 +263,49 @@ public class TagAwareScheduler implements IScheduler {
             availableSlots.addAll(cluster.getAvailableSlots(supervisor));
         }
 
-        if (availableSlots.isEmpty()) {
-            // This is bad, we have supervisors and executors to assign, but no available slots!
+        Set<WorkerSlot> aliveSlots = getAliveSlots(cluster, topologyDetails);
+
+        // Filter alive slots that are on the supervisors for this tag
+        List<WorkerSlot> slotsToUse = new ArrayList<WorkerSlot>();
+        for (WorkerSlot slot : aliveSlots) {
+            for (SupervisorDetails supervisor : supervisors) {
+                if (slot.getNodeId().equals(supervisor.getId())) {
+                    slotsToUse.add(slot);
+                    break;
+                }
+            }
+        }
+
+        int numSlotsNeeded = topologyDetails.getNumWorkers() - aliveSlots.size();
+
+        if (numSlotsNeeded > 0) {
+            if (availableSlots.isEmpty()) {
+                String message = String.format(
+                        "No slots are available for assigning executors for tag %s (components: %s)",
+                        tag, componentsForTag
+                );
+                handleUnsuccessfulScheduling(cluster, topologyDetails, message);
+            }
+            if (availableSlots.size() < numSlotsNeeded) {
+                String message = String.format(
+                        "Not enough slots available for assigning executors for tag %s (components: %s). "
+                                + "Need %s slots to schedule but found only %s",
+                        tag, componentsForTag, numSlotsNeeded, availableSlots.size()
+                );
+                handleUnsuccessfulScheduling(cluster, topologyDetails, message);
+            }
+            slotsToUse.addAll(availableSlots.subList(0, numSlotsNeeded));
+        }
+
+        if (slotsToUse.isEmpty()) {
             String message = String.format(
-                    "No slots are available for assigning executors for tag %s (components: %s)",
+                    "No slots (alive or available) found for assigning executors for tag %s (components: %s)",
                     tag, componentsForTag
             );
             handleUnsuccessfulScheduling(cluster, topologyDetails, message);
         }
 
-        Set<WorkerSlot> aliveSlots = getAliveSlots(cluster, topologyDetails);
-
-        int numAvailableSlots = availableSlots.size();
-        int numSlotsNeeded = topologyDetails.getNumWorkers() - aliveSlots.size();
-
-        // We want to check that we have enough available slots
-        // based on the topology's number of workers and already assigned slots.
-        if (numAvailableSlots < numSlotsNeeded) {
-            // This is bad, we don't have enough slots to assign to!
-            String message = String.format(
-                    "Not enough slots available for assigning executors for tag %s (components: %s). "
-                            + "Need %s slots to schedule but found only %s",
-                    tag, componentsForTag, numSlotsNeeded, numAvailableSlots
-            );
-            handleUnsuccessfulScheduling(cluster, topologyDetails, message);
-        }
-
-        // Now we can use only as many slots as are required.
-        return availableSlots.subList(0, numSlotsNeeded);
+        return slotsToUse;
     }
 
     private Map<WorkerSlot, ArrayList<ExecutorDetails>> getExecutorsBySlot(

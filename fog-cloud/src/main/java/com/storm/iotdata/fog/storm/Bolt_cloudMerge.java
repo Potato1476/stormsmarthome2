@@ -63,6 +63,8 @@ public class Bolt_cloudMerge extends BaseRichBolt {
     private final Map<Integer, Map<String, double[]>> accumulators = new HashMap<>();
     // Track last-update time for cleaning old slices
     private final Map<Integer, Map<String, Long>> lastUpdated = new HashMap<>();
+    // [metrics] windowMin -> (deviceKey -> max produced epoch-ms) for end-to-end latency
+    private final Map<Integer, Map<String, Long>> eventTsAcc = new HashMap<>();
 
     private long triggerCount = 0;
 
@@ -80,6 +82,7 @@ public class Bolt_cloudMerge extends BaseRichBolt {
         for (int w : config.getGatewayWindows()) {
             accumulators.put(w, new HashMap<>());
             lastUpdated.put(w, new HashMap<>());
+            eventTsAcc.put(w, new HashMap<>());
         }
 
         // Init DB tables (idempotent)
@@ -121,12 +124,14 @@ public class Bolt_cloudMerge extends BaseRichBolt {
 
         Map<String, double[]> wAcc = accumulators.get(w);
         Map<String, Long> wTs = lastUpdated.get(w);
+        Map<String, Long> wEts = eventTsAcc.get(w);
         long now = System.currentTimeMillis();
 
         for (AggregatedRecord rec : batch.deviceRecords) {
             // REPLACE: overwrite with latest cumulative values
             wAcc.put(rec.getKey(), new double[]{rec.count, rec.sum});
             wTs.put(rec.getKey(), now);
+            if (wEts != null) wEts.merge(rec.getKey(), rec.eventTsMs, Math::max); // [metrics]
         }
     }
 
@@ -144,7 +149,7 @@ public class Bolt_cloudMerge extends BaseRichBolt {
             Map<String, double[]> devAcc = accumulators.get(w);
             if (devAcc.isEmpty()) continue;
 
-            db.upsertDeviceData(devAcc, w);
+            db.upsertDeviceData(devAcc, eventTsAcc.get(w), w);
 
             Map<String, double[]> hhAcc = rollupToHousehold(devAcc);
             Map<String, double[]> hAcc  = rollupToHouse(devAcc);
@@ -158,7 +163,7 @@ public class Bolt_cloudMerge extends BaseRichBolt {
             for (int targetW : config.getDerivedWindows()) {
                 int ratio = targetW / 30;
                 Map<String, double[]> derived = deriveWindow(base30, ratio);
-                db.upsertDeviceData(derived, targetW);
+                db.upsertDeviceData(derived, null, targetW); // derived windows: event_ts not tracked
                 db.upsertHouseholdData(rollupToHousehold(derived), targetW);
                 db.upsertHouseData(rollupToHouse(derived), targetW);
             }
@@ -410,7 +415,8 @@ public class Bolt_cloudMerge extends BaseRichBolt {
             for (Map.Entry<String, Long> e : ts.entrySet()) {
                 if (now - e.getValue() > CLEAN_THRESHOLD_MS) toRemove.add(e.getKey());
             }
-            for (String k : toRemove) { acc.remove(k); ts.remove(k); }
+            Map<String, Long> ets = eventTsAcc.get(w);
+            for (String k : toRemove) { acc.remove(k); ts.remove(k); if (ets != null) ets.remove(k); }
         }
     }
 

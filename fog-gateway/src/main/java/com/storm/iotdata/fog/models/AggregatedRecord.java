@@ -10,6 +10,7 @@ public class AggregatedRecord {
     public int sliceIndex;
     public double count;
     public double sum;
+    public long eventTsMs; // [metrics] freshest produced epoch-ms among contributing readings
 
     public AggregatedRecord() {}
 
