@@ -155,6 +155,14 @@ public class Bolt_cloudMerge extends BaseRichBolt {
             Map<String, double[]> hAcc  = rollupToHouse(devAcc);
             db.upsertHouseholdData(hhAcc, w);
             db.upsertHouseData(hAcc, w);
+
+            // Forecast stage (parity with monolithic Bolt_forecast):
+            // forecast = (currentAvg + median of that key's recent slice avgs) / 2
+            if (config.isForecastEnabled()) {
+                forecastAndSave(devAcc, "device", w);
+                forecastAndSave(hhAcc,  "household", w);
+                forecastAndSave(hAcc,   "house", w);
+            }
         }
 
         // Derive and save 60-min and 120-min windows from 30-min data
@@ -405,6 +413,51 @@ public class Bolt_cloudMerge extends BaseRichBolt {
             acc[0] += 1;
         }
         return result;
+    }
+
+    /**
+     * Forecast stage — mirrors monolithic Bolt_forecast (forecast = (avg + median)/2).
+     * Here "median" is taken over the recent slice-avgs of the SAME key prefix
+     * (key without its trailing sliceIndex) currently held in the accumulator.
+     * Writes one row per key into fog_forecast. Adds the same analytical/DB workload
+     * to the Fog cloud as the Monolithic baseline, so the comparison is fair.
+     */
+    private void forecastAndSave(Map<String, double[]> acc, String level, int w) {
+        if (acc == null || acc.isEmpty()) return;
+        // Group current slice avgs by entity (key with sliceIndex stripped)
+        Map<String, List<Double>> history = new HashMap<>();
+        Map<String, Double> curAvg = new HashMap<>();
+        for (Map.Entry<String, double[]> e : acc.entrySet()) {
+            double[] cs = e.getValue();
+            if (cs[0] == 0) continue;
+            double avg = cs[1] / cs[0];
+            curAvg.put(e.getKey(), avg);
+            String entity = entityPrefix(e.getKey());
+            history.computeIfAbsent(entity, k -> new ArrayList<>()).add(avg);
+        }
+        Map<String, Double> forecasts = new HashMap<>();
+        for (Map.Entry<String, Double> e : curAvg.entrySet()) {
+            double avg = e.getValue();
+            double median = median(history.get(entityPrefix(e.getKey())));
+            double f = median > 0 ? (avg + median) / 2.0 : avg;
+            forecasts.put(e.getKey(), round2(f));
+        }
+        db.upsertForecast(forecasts, level, w);
+    }
+
+    /** Strip the trailing :sliceIndex segment to get the entity key. */
+    private static String entityPrefix(String key) {
+        int i = key.lastIndexOf(':');
+        return i > 0 ? key.substring(0, i) : key;
+    }
+
+    /** Median of a list of doubles (0 if empty). */
+    private static double median(List<Double> xs) {
+        if (xs == null || xs.isEmpty()) return 0;
+        List<Double> s = new ArrayList<>(xs);
+        Collections.sort(s);
+        int n = s.size();
+        return (n % 2 == 1) ? s.get(n / 2) : (s.get(n / 2 - 1) + s.get(n / 2)) / 2.0;
     }
 
     private void cleanOldSlices(long now) {

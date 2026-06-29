@@ -50,9 +50,15 @@ echo "[4] Publisher ($PUB)"
 NC=$(ls "$PUB"/data-file/house-*.csv 2>/dev/null | wc -l | tr -d ' ')
 [[ "$NC" == "40" ]] && ok "đủ 40 file dữ liệu nhà" || wn "có $NC/40 file house-*.csv"
 
-echo "[5] Scripts đo (stormsmarthome2)"
-for s in observe_ramp.sh observe_offline.sh collect_sim_stats.sh kb2_offline_recovery.sh; do
-  [[ -x "tools/$s" ]] && bash -n "tools/$s" 2>/dev/null && ok "tools/$s" || no "tools/$s lỗi/không +x"
+echo "[5] Scripts đo (bộ remeasure nghiêm ngặt)"
+for s in measure_ramp.sh agg_runs.py verify_windows.sh latency_report.sh \
+         kb2_offline_recovery.sh gen_parallelism.sh gen_manifest.sh anomaly_score.py; do
+  if [[ -f "tools/$s" ]]; then
+    case "$s" in
+      *.py) python3 -m py_compile "tools/$s" 2>/dev/null && ok "tools/$s" || no "tools/$s lỗi cú pháp" ;;
+      *)    bash -n "tools/$s" 2>/dev/null && ok "tools/$s" || no "tools/$s lỗi cú pháp" ;;
+    esac
+  else no "thiếu tools/$s"; fi
 done
 
 echo "[6] Cloud EC2 ($CLOUD_IP) — cần để đo WAN + KB2"
@@ -60,6 +66,26 @@ if curl -s -m 6 -o /dev/null "http://$CLOUD_IP:8080/"; then ok "Storm UI :8080 p
 else wn "Storm UI :8080 KHÔNG phản hồi — stack cloud chưa up hoặc Security Group chặn IP (xem PROMPTS.md mục cuối)"; fi
 if curl -s -m 6 "http://$CLOUD_IP:8000/metrics" 2>/dev/null | grep -q "topology_stats\|storm"; then ok "exporter :8000 có metric"
 else wn "exporter :8000 chưa có metric (topology fog-cloud đã submit chưa?)"; fi
+
+echo "[7] Remeasure readiness (workload parity + bộ đo dùng chung)"
+PROM="${PROM:-http://localhost:9090}"
+# fresh jars (đã rebuild sau khi sửa code chưa?)
+for j in fog-cloud/target/fog-cloud-1.0-jar-with-dependencies.jar fog-gateway/target/fog-gateway-1.0-jar-with-dependencies.jar; do
+  [[ -f "$j" ]] && ok "jar có: $(basename "$j")" || no "thiếu $j — rebuild (xem DO_DAC.md mục 0)"
+done
+# Prometheus + đúng metric mà measure_ramp.sh dùng
+if curl -s -m 6 "$PROM/api/v1/query?query=up" >/dev/null 2>&1; then
+  ok "Prometheus $PROM phản hồi"
+  CAPV=$(curl -s --get "$PROM/api/v1/query" --data-urlencode 'query=max(bolts_capacity)' 2>/dev/null \
+        | python3 -c "import sys,json;r=json.load(sys.stdin)['data']['result'];print(r[0]['value'][1] if r else 'none')" 2>/dev/null)
+  [[ "$CAPV" != "none" && -n "$CAPV" ]] && ok "metric bolts_capacity có (=$CAPV) — measure_ramp.sh đo được" \
+    || wn "chưa thấy bolts_capacity (topology đã submit + exporter scrape chưa?)"
+else wn "Prometheus $PROM không phản hồi (chỉ cần khi bắt đầu đo)"; fi
+# Workload parity banner từ cloud (forecast + windows + cloudmerge mode)
+if [[ -n "${KEY:-}" ]] && ssh -i "${KEY}" -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-new ec2-user@"$CLOUD_IP" true 2>/dev/null; then
+  BANNER=$(ssh -i "$KEY" ec2-user@"$CLOUD_IP" "docker logs cloud-topo-submit 2>&1 | grep -m1 WORKLOAD" 2>/dev/null)
+  [[ -n "$BANNER" ]] && ok "parity: $BANNER" || wn "chưa thấy [WORKLOAD] banner (submit lại topology để in)"
+else wn "đặt KEY=~/.ssh/storm.pem để tự kiểm tra workload banner trên cloud"; fi
 
 echo "═══════════════════════════════════════════════"
 echo " KẾT QUẢ: $pass PASS / $warn WARN / $fail FAIL"

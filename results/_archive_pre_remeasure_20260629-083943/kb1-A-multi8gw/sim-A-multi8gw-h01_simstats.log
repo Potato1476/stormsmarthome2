@@ -1,0 +1,8 @@
+Theo dõi container gw-* mỗi 10s trong 60s → results/kb1-A-multi8gw/sim_stats_sim-A-multi8gw-h01.csv
+14:24:23  gw=814:24:35  gw=814:24:47  gw=814:24:59  gw=814:25:11  gw=8
+  Số gateway     : 8
+  CPU/1 gw bận nhất : trung bình 11.8%  | đỉnh 20.7%  (≈100% = bão hoà 1 vCPU)
+  RAM/1 gw bận nhất : trung bình 182 MB | đỉnh 182 MB
+  RAM tổng 8 gw    : trung bình 1349 MB | đỉnh 1357 MB
+  → điền bảng: CPU=12%  RAM=182MB (mỗi thiết bị biên)
+CSV: results/kb1-A-multi8gw/sim_stats_sim-A-multi8gw-h01.csv

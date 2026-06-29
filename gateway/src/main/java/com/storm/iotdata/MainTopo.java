@@ -11,6 +11,7 @@ import java.io.FileWriter;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import org.apache.storm.tuple.Fields;
 import java.util.HashSet;
 
 import com.storm.iotdata.functions.*;
@@ -99,6 +100,13 @@ public class MainTopo {
                         (cmd.hasOption("cloudbolts") ? cmd.getOptionValue("cloudbolts") : "sum,forecast").split(",")));
 
                 TopologyBuilder builder = new TopologyBuilder();
+                // Bolt_split parallelism is configurable for a FAIR baseline (reviewer A2).
+                // Default 1 = exact original baseline. Bolt_split is STATELESS (it only
+                // classifies a reading into a time-slice and emits), so it can be scaled
+                // safely with fieldsGrouping by houseId. avg/sum/forecast stay serial
+                // because they hold per-window state + flush-trigger semantics.
+                String _sp = System.getenv("SPLIT_PARALLELISM");
+                final int SPLIT_P = (_sp != null && !_sp.isEmpty()) ? Integer.parseInt(_sp) : 1;
                 builder.setSpout("spout-trigger", new Spout_trigger(config), 1);
 
                 for (String topic : config.getSpoutTopicList()) {
@@ -111,7 +119,7 @@ public class MainTopo {
                 HashMap<String, BoltDeclarer> forecastList = new HashMap<String, BoltDeclarer>();
                 for (Integer windowSize : config.getWindowList()) {
                     splitList.put("split-" + windowSize,
-                            tagCloud(builder.setBolt("split-" + windowSize, new Bolt_split(windowSize, config), 1).setNumTasks(4), "split", windowSize, cloudBolts));
+                            tagCloud(builder.setBolt("split-" + windowSize, new Bolt_split(windowSize, config), SPLIT_P).setNumTasks(Math.max(4, SPLIT_P)), "split", windowSize, cloudBolts));
                     avgList.put("avg-" + windowSize,
                             tagCloud(builder.setBolt("avg-" + windowSize, new Bolt_avg(windowSize, config), 1), "avg", windowSize, cloudBolts));
                     sumList.put("sum-" + windowSize,
@@ -122,7 +130,14 @@ public class MainTopo {
                 
                 for (Integer windowSize : config.getWindowList()) {
                     for (String topic : config.getSpoutTopicList()){
-                        splitList.get("split-" + windowSize).allGrouping("spout-data-" + topic, "data");
+                        if (SPLIT_P > 1) {
+                            // Scaled baseline: partition by houseId so each reading hits ONE
+                            // split task (no duplication) — correct because split is stateless.
+                            splitList.get("split-" + windowSize).fieldsGrouping("spout-data-" + topic, "data", new Fields("houseId"));
+                        } else {
+                            // Original baseline (unchanged) — keeps measured numbers reproducible.
+                            splitList.get("split-" + windowSize).allGrouping("spout-data-" + topic, "data");
+                        }
                     }
                     avgList.get("avg-" + windowSize).shuffleGrouping("split-" + windowSize, "data");
                     avgList.get("avg-" + windowSize).shuffleGrouping("spout-trigger", "trigger");

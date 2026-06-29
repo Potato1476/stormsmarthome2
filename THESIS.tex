@@ -1,0 +1,2857 @@
+%% ============================================================================
+%%  ĐỒ ÁN TỐT NGHIỆP
+%%  XÂY DỰNG VÀ ĐÁNH GIÁ HIỆU NĂNG HỆ THỐNG FOG COMPUTING CHO IOT NHÀ THÔNG MINH:
+%%  SO SÁNH KIẾN TRÚC MONOLITHIC VÀ FOG TRÊN NỀN TẢNG APACHE STORM
+%%
+%%  Biên dịch:  pdflatex THESIS.tex  (chạy 2-3 lần để cập nhật mục lục/tham chiếu)
+%%  Yêu cầu:    bản TeX có gói vntex (T5) — Overleaf đã có sẵn.
+%%  Ghi chú font tiếng Việt: nếu pdflatex báo lỗi font T5, chuyển sang biên dịch
+%%              bằng XeLaTeX và thay khối font bằng fontspec + Times New Roman.
+%%  Ảnh Grafana đặt trong:  images/mono/  images/fog/kb1a/  images/fog/kb1b/
+%%                          images/fog/kb2a/  images/fog/kb2b/
+%% ============================================================================
+\documentclass[13pt,a4paper]{report}
+
+%% ---------- Mã hoá & ngôn ngữ ----------
+\usepackage[T5]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+
+%% ---------- Bố cục trang ----------
+\usepackage[left=3cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+%% ---------- Đồ hoạ & bảng ----------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{siunitx}
+
+%% ---------- Toán & mã nguồn ----------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+
+%% ---------- Biểu đồ TikZ / pgfplots ----------
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usepgfplotslibrary{groupplots}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc,shapes.geometric,shapes.misc}
+\usepackage{pgf-pie}
+
+%% ---------- Tiêu đề chương, header/footer, mục lục ----------
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tocloft}
+
+%% ---------- Liên kết & tham chiếu (nạp gần cuối) ----------
+\usepackage[hidelinks]{hyperref}
+\usepackage[noabbrev,nameinlink]{cleveref}
+
+%% cleveref chưa hỗ trợ tiếng Việt -> tự định nghĩa tên tham chiếu
+\crefname{chapter}{Chương}{Chương}
+\Crefname{chapter}{Chương}{Chương}
+\crefname{section}{Mục}{Mục}
+\Crefname{section}{Mục}{Mục}
+\crefname{figure}{Hình}{Hình}
+\Crefname{figure}{Hình}{Hình}
+\crefname{table}{Bảng}{Bảng}
+\Crefname{table}{Bảng}{Bảng}
+\crefname{equation}{Công thức}{Công thức}
+\Crefname{equation}{Công thức}{Công thức}
+
+\setlength{\headheight}{15pt}
+
+%% ============================================================================
+%%  ĐỊNH NGHĨA MÀU, KIỂU MÃ NGUỒN, LỆNH TIỆN ÍCH
+%% ============================================================================
+\definecolor{monoRed}{RGB}{197,48,48}
+\definecolor{fog8Green}{RGB}{34,139,34}
+\definecolor{fog1Orange}{RGB}{221,128,18}
+\definecolor{accentBlue}{RGB}{27,94,160}
+\definecolor{codeBg}{RGB}{246,246,248}
+\definecolor{codeKw}{RGB}{0,90,160}
+\definecolor{codeCm}{RGB}{90,120,90}
+\definecolor{boxGray}{RGB}{236,238,242}
+
+\lstset{
+  backgroundcolor=\color{codeBg},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{codeKw}\bfseries,
+  commentstyle=\color{codeCm}\itshape,
+  stringstyle=\color{monoRed},
+  numbers=left, numberstyle=\tiny\color{gray}, numbersep=8pt,
+  breaklines=true, frame=single, rulecolor=\color{gray!40},
+  showstringspaces=false, tabsize=2, captionpos=b,
+  extendedchars=false, inputencoding=utf8
+}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+% Ảnh Grafana: hiện ảnh nếu đã có; nếu chưa (đang đo lại) thì hiện khung placeholder
+% để báo cáo VẪN biên dịch được. Sau khi đo, chỉ cần copy ảnh vào images/ là tự hiện.
+\newcommand{\grafana}[1]{%
+  \IfFileExists{#1}{\includegraphics[width=\linewidth]{#1}}%
+  {\fbox{\parbox[c][3cm][c]{0.88\linewidth}{\centering\small
+   [Ảnh Grafana sẽ chèn sau khi đo lại]\\[3pt] \texttt{\footnotesize \detokenize{#1}}}}}%
+}
+\sisetup{group-separator={.},group-minimum-digits=4}
+
+%% ---------- Định dạng tiêu đề chương kiểu "CHƯƠNG 1" ----------
+\titleformat{\chapter}[display]
+  {\normalfont\Large\bfseries\filcenter}
+  {\MakeUppercase{\chaptertitlename}\ \thechapter}{12pt}{\LARGE}
+\titlespacing*{\chapter}{0pt}{10pt}{28pt}
+
+%% ---------- Header / Footer ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\nouppercase{\leftmark}}
+\fancyhead[R]{\thepage}
+\fancypagestyle{plain}{\fancyhf{}\fancyhead[R]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+%% ---------- Tên các danh mục ----------
+\addto\captionsvietnamese{%
+  \renewcommand{\contentsname}{MỤC LỤC}%
+  \renewcommand{\listfigurename}{DANH MỤC HÌNH ẢNH}%
+  \renewcommand{\listtablename}{DANH MỤC BẢNG}%
+  \renewcommand{\bibname}{TÀI LIỆU THAM KHẢO}%
+  \renewcommand{\chaptername}{CHƯƠNG}%
+  \renewcommand{\appendixname}{PHỤ LỤC}%
+}
+
+%% ============================================================================
+\begin{document}
+%% ============================================================================
+
+%% ----------------------------------------------------------------------------
+%%  TRANG BÌA
+%% ----------------------------------------------------------------------------
+\begin{titlepage}
+\centering
+\thispagestyle{empty}
+{\large ĐẠI HỌC QUỐC GIA HÀ NỘI\par}
+{\large TRƯỜNG ĐẠI HỌC CÔNG NGHỆ\par}
+{\large KHOA CÔNG NGHỆ THÔNG TIN\par}
+\vspace{1.2cm}
+% Đặt logo trường (logo-uet.png) cùng thư mục để hiển thị; nếu không có thì bỏ trống.
+\IfFileExists{logo-uet.png}{\includegraphics[width=0.18\textwidth]{logo-uet.png}\par}{\vspace{2.4cm}}
+\vspace{0.6cm}
+{\Large\bfseries ĐỒ ÁN TỐT NGHIỆP\par}
+\vspace{1.6cm}
+{\LARGE\bfseries XÂY DỰNG VÀ ĐÁNH GIÁ HIỆU NĂNG\\[0.3em]
+HỆ THỐNG FOG COMPUTING CHO IOT NHÀ THÔNG MINH:\\[0.3em]
+SO SÁNH KIẾN TRÚC MONOLITHIC VÀ FOG\\[0.3em]
+TRÊN NỀN TẢNG APACHE STORM\par}
+\vspace{2.2cm}
+\begin{flushright}
+\begin{minipage}{0.62\textwidth}
+\large
+\textbf{Sinh viên thực hiện:} Nguyễn Gia Bảo\\[0.4em]
+\textbf{Mã sinh viên:} 22025514\\[0.4em]
+\textbf{Lớp:} \dotfill\\[0.4em]
+\textbf{Giảng viên hướng dẫn:}\\[0.2em]
+\hspace*{1.2em}PGS.TS. Phạm Mạnh Linh\\[0.2em]
+\hspace*{1.2em}ThS. Trần Anh Tú\\[0.4em]
+\end{minipage}
+\end{flushright}
+\vfill
+{\large Hà Nội, tháng 6 năm 2026\par}
+\end{titlepage}
+
+%% Chú thích: thay \includegraphics{example-image-a} bằng logo trường (logo-uit.png).
+
+%% ----------------------------------------------------------------------------
+%%  CÁC TRANG ĐẦU (đánh số La Mã)
+%% ----------------------------------------------------------------------------
+\pagenumbering{roman}
+
+%% ---------- Trang xác nhận của giảng viên ----------
+\chapter*{NHẬN XÉT CỦA GIẢNG VIÊN HƯỚNG DẪN}
+\addcontentsline{toc}{chapter}{Nhận xét của giảng viên hướng dẫn}
+\thispagestyle{plain}
+\vspace{1em}
+\noindent\dotfill\par\vspace{1.4em}
+\noindent\dotfill\par\vspace{1.4em}
+\noindent\dotfill\par\vspace{1.4em}
+\noindent\dotfill\par\vspace{1.4em}
+\noindent\dotfill\par\vspace{1.4em}
+\noindent\dotfill\par\vspace{1.4em}
+\noindent\dotfill\par\vspace{1.4em}
+\noindent\dotfill\par
+\vspace{2.5em}
+\begin{flushright}
+\textit{Hà Nội, ngày \dots\ tháng \dots\ năm 2026}\\[0.4em]
+\textbf{Giảng viên hướng dẫn}\\[3.2em]
+\dotfill
+\end{flushright}
+
+%% ---------- Lời cam đoan ----------
+\chapter*{LỜI CAM ĐOAN}
+\addcontentsline{toc}{chapter}{Lời cam đoan}
+\thispagestyle{plain}
+Tôi xin cam đoan đồ án tốt nghiệp với đề tài \textit{``Xây dựng và đánh giá
+hiệu năng hệ thống Fog Computing cho IoT Nhà Thông Minh: So sánh kiến trúc
+Monolithic và Fog trên nền tảng Apache Storm''} là công trình nghiên cứu của
+riêng tôi dưới sự hướng dẫn của giảng viên hướng dẫn. Các số liệu, kết quả đo
+lường trình bày trong đồ án là trung thực, được thu thập trực tiếp từ hệ thống
+thực nghiệm do tôi triển khai trên nền tảng Apache Storm, Docker, Amazon EC2 và
+thiết bị Raspberry Pi 3. Mọi tham khảo từ tài liệu của tác giả khác đều được
+trích dẫn đầy đủ trong phần Tài liệu tham khảo. Tôi xin chịu hoàn toàn trách
+nhiệm về tính trung thực của nội dung đồ án này.
+
+\vspace{2.5em}
+\begin{flushright}
+\textit{Hà Nội, ngày \dots\ tháng \dots\ năm 2026}\\[0.4em]
+\textbf{Sinh viên thực hiện}\\[3.2em]
+Nguyễn Gia Bảo
+\end{flushright}
+
+%% ---------- Lời cảm ơn ----------
+\chapter*{LỜI CẢM ƠN}
+\addcontentsline{toc}{chapter}{Lời cảm ơn}
+\thispagestyle{plain}
+Tôi xin gửi lời cảm ơn chân thành đến quý thầy cô Khoa Công nghệ Thông tin,
+Trường Đại học Công nghệ --- Đại học Quốc gia Hà Nội đã truyền đạt những
+kiến thức nền tảng quý báu trong suốt quá trình học tập. Đặc biệt, tôi xin bày
+tỏ lòng biết ơn sâu sắc đến giảng viên hướng dẫn đã tận tình định hướng, góp ý
+và đồng hành cùng tôi trong toàn bộ quá trình thực hiện đồ án này. Tôi cũng xin
+cảm ơn gia đình và bạn bè đã luôn động viên, hỗ trợ để tôi hoàn thành đồ án tốt
+nghiệp.
+
+%% ---------- Tóm tắt tiếng Việt ----------
+\chapter*{TÓM TẮT}
+\addcontentsline{toc}{chapter}{Tóm tắt}
+\thispagestyle{plain}
+Sự bùng nổ của Internet of Things (IoT) đặt ra thách thức lớn về băng thông và
+độ trễ khi toàn bộ dữ liệu cảm biến được đẩy lên Cloud để xử lý. Đồ án này
+nghiên cứu, thiết kế và đánh giá hiệu năng một hệ thống \textbf{Fog Computing}
+cho bài toán giám sát tiêu thụ điện của 40 ngôi nhà thông minh, với tổng tải lên
+tới \textbf{400 msg/s}, được xây dựng trên nền tảng Apache Storm. Hệ thống được
+so sánh trực tiếp với kiến trúc \textbf{Monolithic} (xử lý toàn bộ trên Cloud)
+qua sáu kịch bản thực nghiệm.
+
+Kết quả đo lường cho thấy: kiến trúc Monolithic bão hoà tại khoảng 20 nhà
+(200 msg/s), với \code{Bolt\_split} đạt \textbf{169\%} capacity và complete
+latency \textbf{5,28 s} tại 400 msg/s. Ngược lại, kiến trúc Fog với
+\textbf{8 gateway} duy trì cloud bolt capacity \textbf{0\%} tại 400 msg/s, gateway
+xử lý ở mức sub-millisecond (\textless 0,1 ms execute latency). Cơ chế
+Store-and-Forward đạt \textbf{0\% mất mát dữ liệu} khi Cloud ngắt kết nối 5 phút,
+phục hồi hoàn toàn trong \textbf{71--96 s}. Lưu lượng WAN giảm khoảng
+\textbf{86\%} nhờ nén GZIP theo lô. Gateway được triển khai thực tế trên thiết bị
+Raspberry Pi 3. Đồ án đề xuất tổng cộng \textbf{mười cải tiến kỹ thuật} so với kiến
+trúc Monolithic (cùng một bản vá lỗi đo lường mang tính tiền đề), trong đó có cơ
+chế \textit{Energy Optimizer} tự động ``đóng băng'' gateway nhàn rỗi để đưa CPU về
+0\%.
+
+\vspace{0.8em}
+\noindent\textbf{Từ khoá:} Fog Computing, Edge Computing, IoT, Apache Storm,
+Smart Home, Store-and-Forward, Raspberry Pi, MQTT.
+
+%% ---------- Tóm tắt tiếng Anh ----------
+\chapter*{ABSTRACT}
+\addcontentsline{toc}{chapter}{Abstract}
+\thispagestyle{plain}
+The rapid growth of the Internet of Things (IoT) raises serious bandwidth and
+latency challenges when all sensor data is pushed to the Cloud for processing.
+This thesis designs and evaluates a \textbf{Fog Computing} system for monitoring
+the power consumption of 40 smart homes, with an aggregate load of up to
+\textbf{400 msg/s}, built on Apache Storm. The system is directly compared with a
+\textbf{Monolithic} architecture (all processing on the Cloud) across six
+experimental scenarios.
+
+The measurements show that the Monolithic architecture saturates at around 20
+homes (200 msg/s), where \code{Bolt\_split} reaches \textbf{169\%} capacity and
+the complete latency rises to \textbf{5.28 s} at 400 msg/s. In contrast, the Fog
+architecture with \textbf{8 gateways} keeps the cloud bolt capacity at
+\textbf{0\%} at 400 msg/s, while the gateway processes tuples at sub-millisecond
+latency (\textless 0.1 ms execute latency). A disk-backed Store-and-Forward
+mechanism achieves \textbf{0\% data loss} during a 5-minute cloud outage and
+fully recovers within \textbf{71--96 s}. WAN traffic is reduced by approximately
+\textbf{86\%} through batched GZIP compression. The gateway is deployed on real
+Raspberry Pi 3 hardware. The thesis contributes \textbf{eleven technical
+improvements} over the Monolithic baseline, including an \textit{Energy
+Optimizer} daemon that freezes idle gateways to bring their CPU usage to 0\%.
+
+\vspace{0.8em}
+\noindent\textbf{Keywords:} Fog Computing, Edge Computing, IoT, Apache Storm,
+Smart Home, Store-and-Forward, Raspberry Pi, MQTT.
+
+%% ---------- Mục lục, danh mục hình, bảng ----------
+\tableofcontents
+\listoffigures
+\listoftables
+
+%% ---------- Danh mục từ viết tắt ----------
+\chapter*{DANH MỤC TỪ VIẾT TẮT}
+\addcontentsline{toc}{chapter}{Danh mục từ viết tắt}
+\thispagestyle{plain}
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{p{0.22\textwidth} p{0.72\textwidth}}
+\toprule
+\textbf{Từ viết tắt} & \textbf{Diễn giải} \\
+\midrule
+\endhead
+IoT      & Internet of Things --- Mạng lưới vạn vật kết nối \\
+MQTT     & Message Queuing Telemetry Transport --- giao thức nhắn tin publish/subscribe \\
+QoS      & Quality of Service --- mức bảo đảm gửi tin \\
+WAN      & Wide Area Network --- mạng diện rộng \\
+EC2      & Amazon Elastic Compute Cloud \\
+JVM      & Java Virtual Machine --- máy ảo Java \\
+JIT      & Just-In-Time compilation \\
+JDBC     & Java Database Connectivity \\
+GZIP     & GNU Zip --- thuật toán nén dữ liệu \\
+EWMA     & Exponentially Weighted Moving Average --- trung bình trượt có trọng số mũ \\
+RAM      & Random Access Memory \\
+CPU      & Central Processing Unit \\
+DB       & Database --- cơ sở dữ liệu \\
+PK       & Primary Key --- khoá chính \\
+NIST     & National Institute of Standards and Technology \\
+KB       & Kịch bản (trong ngữ cảnh thực nghiệm) hoặc Kilobyte (đơn vị dữ liệu) \\
+GW       & Gateway --- cổng biên Fog \\
+EMA      & Exponential Moving Average \\
+ZK       & ZooKeeper --- dịch vụ điều phối của Apache Storm \\
+\bottomrule
+\end{longtable}
+\renewcommand{\arraystretch}{1.0}
+
+%% ============================================================================
+%%  PHẦN NỘI DUNG CHÍNH (đánh số Ả Rập)
+%% ============================================================================
+\pagenumbering{arabic}
+
+%% ############################################################################
+\chapter{MỞ ĐẦU}
+\label{ch:modau}
+%% ############################################################################
+
+\section{Bối cảnh và động lực nghiên cứu}
+
+Internet of Things (IoT) đang trải qua giai đoạn tăng trưởng bùng nổ. Theo nhiều
+dự báo công nghiệp, số lượng thiết bị IoT kết nối toàn cầu sẽ vượt mốc
+\textbf{50 tỷ thiết bị vào năm 2030}, trải rộng trên các lĩnh vực nhà thông minh,
+y tế từ xa, nông nghiệp chính xác và thành phố thông minh. Mỗi thiết bị liên tục
+phát sinh các luồng dữ liệu cảm biến với tần suất cao, tạo ra một khối lượng dữ
+liệu khổng lồ cần được thu thập, xử lý và lưu trữ theo thời gian thực.
+
+Mô hình điện toán truyền thống đẩy \textit{toàn bộ} dữ liệu thô từ thiết bị lên
+Cloud để xử lý tập trung. Cách tiếp cận này tuy đơn giản nhưng bộc lộ ba hạn chế
+nghiêm trọng khi quy mô tăng lên:
+
+\begin{itemize}
+  \item \textbf{Áp lực băng thông:} mỗi thông điệp thô được gửi riêng lẻ qua mạng
+        diện rộng (WAN) khiến băng thông tiêu thụ tăng tuyến tính theo số lượng
+        thiết bị. Với hàng trăm thiết bị, chi phí truyền dẫn và độ trễ mạng trở
+        thành điểm nghẽn.
+  \item \textbf{Độ trễ xử lý:} dữ liệu phải vượt qua một chặng đường dài
+        (thiết bị $\to$ WAN $\to$ Cloud $\to$ xử lý $\to$ phản hồi), không phù hợp
+        với các ứng dụng yêu cầu phản ứng tức thời như cảnh báo bất thường.
+  \item \textbf{Phụ thuộc kết nối:} nếu đường truyền tới Cloud bị gián đoạn, toàn
+        bộ pipeline ngừng hoạt động và dữ liệu trong thời gian mất kết nối bị mất
+        hoàn toàn.
+\end{itemize}
+
+\textbf{Fog Computing} (điện toán sương mù) ra đời như một giải pháp cho các hạn
+chế trên. Thay vì xử lý tập trung ở Cloud, Fog Computing bổ sung một tầng tính
+toán trung gian đặt gần nguồn dữ liệu --- gọi là \textit{tầng sương mù} --- để
+tiền xử lý, tổng hợp và lọc dữ liệu trước khi truyền phần tinh gọn lên Cloud.
+
+Để nghiên cứu định lượng lợi ích của Fog Computing, đồ án này xây dựng một bài
+toán cụ thể: \textbf{hệ thống giám sát tiêu thụ điện cho 40 ngôi nhà thông
+minh}. Mỗi ngôi nhà phát các bản tin đo công suất với tốc độ \textbf{10 msg/s}
+liên tục, tạo ra tổng tải tối đa \textbf{400 msg/s}. Hệ thống cần tổng hợp dữ
+liệu theo nhiều cửa sổ thời gian và lưu trữ kết quả phục vụ trực quan hoá thời
+gian thực.
+
+\section{Vấn đề đặt ra}
+
+Khi triển khai bài toán trên bằng kiến trúc \textbf{Monolithic} --- toàn bộ
+pipeline xử lý (phân loại, tính trung bình, tổng hợp, dự báo) chạy trên một
+cụm Apache Storm đặt ở Cloud --- hệ thống bộc lộ điểm bão hoà rõ rệt. Qua đo
+lường thực nghiệm (\Cref{ch:ketqua-mono}), kiến trúc Monolithic đạt điểm bão hoà
+tại khoảng \textbf{200 msg/s} (20 nhà): bolt phân loại \code{Bolt\_split} vượt
+\textbf{169\%} capacity tại 400 msg/s và complete latency tăng vọt lên
+\textbf{5,28 s}. Khi đó tỷ lệ ack giảm từ 3,4\% xuống còn 0,4\%, cho thấy hệ
+thống không còn xử lý kịp tốc độ dữ liệu đến.
+
+Câu hỏi đặt ra là: \textit{liệu một kiến trúc Fog Computing được thiết kế phù hợp
+có thể vượt qua điểm nghẽn này, đồng thời cải thiện khả năng chịu lỗi và giảm tải
+WAN hay không?} Và nếu có, cái giá phải trả về tài nguyên ở tầng biên là bao
+nhiêu?
+
+\section{Mục tiêu nghiên cứu}
+
+Đồ án đặt ra bốn mục tiêu chính:
+
+\begin{enumerate}
+  \item Thiết kế và cài đặt một kiến trúc Fog Computing hoàn chỉnh trên nền tảng
+        Apache Storm, với gateway biên chạy Storm LocalCluster và Cloud chạy cụm
+        Storm phân tán.
+  \item Đề xuất và hiện thực hoá các \textbf{cải tiến kỹ thuật} so với kiến trúc
+        Monolithic, bao gồm tích luỹ gia tăng, nén GZIP theo lô, Store-and-Forward,
+        phát hiện bất thường tại biên và tối ưu năng lượng.
+  \item Đo lường và so sánh \textbf{tám chỉ số hiệu năng} trên \textbf{sáu kịch
+        bản thực nghiệm} giữa hai kiến trúc.
+  \item Triển khai và kiểm chứng gateway trên thiết bị nhúng tài nguyên thấp
+        \textbf{Raspberry Pi 3}.
+\end{enumerate}
+
+\section{Phạm vi và giới hạn}
+
+\textbf{Phạm vi:} đồ án tập trung vào quy mô 40 ngôi nhà, sử dụng dữ liệu mô phỏng
+theo phong cách dataset REFIT, trên ngăn xếp công nghệ Apache Storm + MQTT +
+MySQL + Prometheus + Grafana, triển khai trên Amazon EC2 (vùng ap-southeast-1) và
+Raspberry Pi 3.
+
+\textbf{Giới hạn:} đồ án không so sánh với các nền tảng xử lý luồng khác như Apache
+Spark Streaming hay Apache Flink; không đo lường mức tiêu thụ điện năng phần cứng
+của Raspberry Pi 3; và trong kịch bản 8 gateway, hệ thống dùng 7 container Docker
+mô phỏng cộng với 1 Raspberry Pi 3 vật lý thực tế (chưa triển khai đủ 8 thiết bị
+Pi vật lý).
+
+\section{Đóng góp chính}
+
+Đóng góp cốt lõi của đồ án là \textbf{mười cải tiến kỹ thuật} của kiến trúc Fog so
+với Monolithic (bên cạnh một bản vá lỗi đo lường mang tính tiền đề), được trình
+bày chi tiết trong \Cref{ch:thietke} và kiểm chứng bằng số liệu thực nghiệm trong
+\Cref{ch:ketqua-fog,ch:sosanh}. Các cải tiến bao gồm: tích luỹ gia tăng thay cho
+fan-out, nén GZIP theo lô, cơ chế Store-and-Forward chống mất dữ liệu, phát hiện
+bất thường bằng EWMA z-score, định tuyến cảnh báo Slack theo từng nhà, bộ lập lịch
+TagAwareScheduler, ghi idempotent bằng \code{REPLACE INTO}, đơn giản hoá topology
+Cloud, và daemon Energy Optimizer tối ưu năng lượng tầng biên.
+
+\section{Cấu trúc đồ án}
+
+Phần còn lại của đồ án được tổ chức như sau. \textbf{\Cref{ch:cosoly}} trình bày cơ
+sở lý thuyết về IoT, Fog Computing, Apache Storm và các công nghệ liên quan.
+\textbf{\Cref{ch:thietke}} mô tả chi tiết thiết kế và cài đặt hai kiến trúc cùng 11
+cải tiến kỹ thuật. \textbf{\Cref{ch:phuongphap}} trình bày phương pháp thực nghiệm
+và sáu kịch bản đo. \textbf{\Cref{ch:ketqua-mono}} và \textbf{\Cref{ch:ketqua-fog}}
+lần lượt trình bày kết quả của hệ thống Monolithic và Fog. \textbf{\Cref{ch:sosanh}}
+so sánh và phân tích toàn diện hai kiến trúc. \textbf{\Cref{ch:ketluan}} kết luận
+và đề xuất hướng phát triển.
+
+%% ############################################################################
+\chapter{CƠ SỞ LÝ THUYẾT}
+\label{ch:cosoly}
+%% ############################################################################
+
+\section{Internet of Things và Smart Home}
+
+\subsection{Kiến trúc IoT ba tầng}
+
+Một hệ thống IoT điển hình được tổ chức thành ba tầng chức năng:
+
+\begin{itemize}
+  \item \textbf{Tầng cảm nhận (Perception):} gồm các cảm biến và bộ chấp hành thu
+        thập dữ liệu vật lý (nhiệt độ, công suất điện, độ ẩm\dots) và chuyển đổi
+        thành tín hiệu số.
+  \item \textbf{Tầng mạng (Network):} chịu trách nhiệm truyền dữ liệu từ tầng cảm
+        nhận lên tầng ứng dụng thông qua các giao thức như MQTT, CoAP, HTTP trên
+        nền Wi-Fi, Ethernet hoặc mạng di động.
+  \item \textbf{Tầng ứng dụng (Application):} xử lý, phân tích và trực quan hoá dữ
+        liệu, cung cấp dịch vụ cho người dùng cuối.
+\end{itemize}
+
+\subsection{Giao thức MQTT}
+
+MQTT (Message Queuing Telemetry Transport) là giao thức nhắn tin nhẹ theo mô hình
+\textbf{publish/subscribe}, được thiết kế cho các thiết bị tài nguyên hạn chế và
+mạng băng thông thấp, độ trễ cao. Các thành phần chính gồm \textit{broker} (máy
+chủ trung gian), \textit{publisher} (bên phát) và \textit{subscriber} (bên nhận),
+liên kết qua các \textit{topic}.
+
+MQTT hỗ trợ ba mức Quality of Service (QoS): \textbf{QoS 0} (gửi nhiều nhất một
+lần, không bảo đảm), \textbf{QoS 1} (gửi ít nhất một lần, có thể trùng lặp) và
+\textbf{QoS 2} (gửi đúng một lần, bảo đảm cao nhất). Trong đồ án, các bản tin cảm
+biến dùng QoS 0 để tối đa hoá thông lượng, trong khi tính idempotent ở Cloud đảm
+bảo không sinh dữ liệu trùng.
+
+\subsection{Dataset REFIT}
+
+REFIT là tập dữ liệu công khai về điện năng tiêu thụ tại 20 hộ gia đình ở Anh,
+trong đó công suất từng thiết bị được ghi nhận với chu kỳ khoảng 8 giây. Đồ án
+mở rộng mô hình này lên 40 ngôi nhà bằng publisher mô phỏng, mỗi nhà phát bản tin
+với tốc độ 10 msg/s nhằm tạo tải đủ lớn để khảo sát điểm bão hoà.
+
+\section{Fog Computing}
+
+\subsection{Định nghĩa}
+
+Theo định nghĩa của NIST (SP 500-325), \textit{Fog Computing là một mô hình tính
+toán phân tán nằm theo chiều ngang, cung cấp tài nguyên tính toán, lưu trữ, điều
+khiển và mạng dọc theo liên tục từ Cloud đến thiết bị (Cloud-to-Thing)}. Fog
+Computing không thay thế Cloud mà bổ sung một tầng trung gian giữa thiết bị biên
+và trung tâm dữ liệu.
+
+\subsection{So sánh Edge, Fog và Cloud}
+
+\Cref{tab:edge-fog-cloud} so sánh ba mô hình theo các thuộc tính chính.
+
+\begin{table}[H]
+\centering
+\caption{So sánh Edge, Fog và Cloud Computing}
+\label{tab:edge-fog-cloud}
+\begin{tabular}{p{0.24\textwidth} p{0.22\textwidth} p{0.22\textwidth} p{0.22\textwidth}}
+\toprule
+\textbf{Thuộc tính} & \textbf{Edge} & \textbf{Fog} & \textbf{Cloud} \\
+\midrule
+Vị trí          & Trên thiết bị      & Gần thiết bị (LAN)  & Trung tâm dữ liệu \\
+Độ trễ          & Rất thấp (ms)      & Thấp (ms--vài chục) & Cao (vài trăm ms) \\
+Năng lực tính toán & Hạn chế         & Trung bình          & Rất lớn \\
+Lưu trữ         & Tạm thời          & Trung hạn           & Dài hạn, lớn \\
+Băng thông WAN  & Không cần         & Giảm mạnh           & Tốn nhiều \\
+Khả năng offline & Có               & Có                  & Không \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Lợi ích và mô hình Store-and-Forward}
+
+Fog Computing mang lại ba lợi ích cốt lõi: \textbf{giảm băng thông} (nhờ tổng hợp
+và nén dữ liệu tại biên), \textbf{giảm độ trễ} (xử lý gần nguồn) và \textbf{khả
+năng chịu lỗi offline} (tiếp tục hoạt động khi mất kết nối Cloud).
+
+Khả năng offline được hiện thực hoá bằng mô hình \textbf{Store-and-Forward}: khi
+đường truyền tới Cloud bị gián đoạn, tầng Fog \textit{lưu tạm} (store) các lô dữ
+liệu đã tổng hợp xuống đĩa, và \textit{chuyển tiếp} (forward) chúng theo thứ tự
+khi kết nối phục hồi. Nhờ đó, dữ liệu không bị mất trong thời gian mất kết nối ---
+một đặc tính mà kiến trúc Monolithic không thể có.
+
+\section{Apache Storm}
+
+\subsection{Kiến trúc cụm}
+
+Apache Storm là một hệ thống xử lý luồng dữ liệu phân tán, thời gian thực. Các
+thành phần chính gồm:
+
+\begin{itemize}
+  \item \textbf{Nimbus:} nút điều phối trung tâm, phân phối mã và giao việc cho
+        các Supervisor.
+  \item \textbf{Supervisor:} chạy trên mỗi nút worker, khởi động và giám sát các
+        tiến trình Worker theo lệnh của Nimbus.
+  \item \textbf{Worker:} một tiến trình JVM thực thi một phần của topology.
+  \item \textbf{Executor:} một luồng (thread) trong Worker, chạy một hoặc nhiều
+        Task.
+  \item \textbf{Task:} một thực thể của Spout hoặc Bolt thực thi logic xử lý.
+\end{itemize}
+
+\subsection{Các khái niệm cốt lõi}
+
+\textbf{Topology} là đồ thị xử lý gồm các Spout và Bolt. \textbf{Spout} là nguồn
+dữ liệu (đọc từ MQTT, Kafka\dots). \textbf{Bolt} là đơn vị xử lý (lọc, tổng hợp,
+ghi DB\dots). \textbf{Stream} là luồng tuple vô hạn chảy giữa các thành phần.
+\textbf{Grouping} quy định cách phân phối tuple từ một thành phần tới thành phần
+kế tiếp (shuffle, fields, all\dots).
+
+\subsection{Các metric quan trọng}
+
+\Cref{tab:storm-metric} liệt kê các metric Storm dùng để đánh giá hiệu năng.
+
+\begin{table}[H]
+\centering
+\caption{Các metric hiệu năng của Apache Storm}
+\label{tab:storm-metric}
+\begin{tabular}{p{0.26\textwidth} p{0.66\textwidth}}
+\toprule
+\textbf{Metric} & \textbf{Ý nghĩa} \\
+\midrule
+\code{bolt\_capacity}   & Tỷ lệ thời gian bolt bận xử lý; \textgreater 100\% nghĩa là bolt quá tải, không xử lý kịp tốc độ đến. \\
+\code{complete\_latency}& Thời gian trung bình một tuple từ khi Spout phát ra đến khi được ack hoàn toàn. \\
+\code{execute\_latency} & Thời gian thực thi trung bình một lần gọi \code{execute()}. \\
+\code{acked / emitted}  & Số tuple được xác nhận / phát ra; tỷ lệ ack thấp cho thấy nghẽn cổ chai. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{LocalCluster và Distributed cluster}
+
+Apache Storm hỗ trợ hai chế độ chạy: \textbf{LocalCluster} mô phỏng toàn bộ cụm
+trong một tiến trình JVM duy nhất (phù hợp cho thiết bị nhúng như Raspberry Pi),
+và \textbf{Distributed cluster} chạy trên nhiều nút vật lý với Nimbus,
+Supervisor và ZooKeeper riêng biệt (dùng cho Cloud). Trong đồ án, gateway Fog
+dùng LocalCluster còn Cloud dùng cụm phân tán.
+
+\subsection{Cơ chế đảm bảo xử lý và backpressure}
+\label{sec:acking}
+
+Storm bảo đảm mỗi tuple được xử lý ít nhất một lần (\textit{at-least-once}) thông
+qua cơ chế \textbf{acking}: mỗi tuple do Spout phát ra được gán một ID, và Storm
+theo dõi toàn bộ cây tuple sinh ra từ nó (anchoring). Khi tất cả các tuple con
+được bolt gọi \code{ack()}, tuple gốc mới được coi là hoàn tất; nếu quá thời gian
+\code{topology.message.timeout.secs} mà chưa hoàn tất, Spout sẽ phát lại tuple.
+Chính cơ chế này định nghĩa \code{complete\_latency} --- khoảng thời gian từ khi
+phát tuple đến khi cây tuple được ack đầy đủ.
+
+Khi một bolt không xử lý kịp tốc độ tuple đến (capacity tiến tới và vượt 100\%),
+hàng đợi nội bộ của nó đầy dần. Storm phản ứng bằng \textbf{backpressure}: tín
+hiệu nghẽn lan ngược về phía Spout, buộc Spout giảm tốc độ phát (throttle). Đây
+là lý do trong kịch bản Monolithic, khi \code{Bolt\_split} quá tải, tốc độ phát
+của Spout bị kéo xuống còn khoảng 199--296 ops/s dù đầu vào là 400 msg/s. Hiểu rõ
+acking và backpressure là điều kiện để diễn giải chính xác các số liệu capacity,
+complete latency và spout emitted rate ở các chương kết quả.
+
+\section{Các công nghệ liên quan}
+
+\begin{itemize}
+  \item \textbf{Docker và Docker Compose:} container hoá các dịch vụ thành các đơn
+        vị độc lập, đảm bảo môi trường nhất quán và dễ triển khai. Docker Compose
+        điều phối nhiều container qua một tệp khai báo.
+  \item \textbf{Prometheus + Grafana:} Prometheus thu thập metric theo mô hình
+        kéo (pull) với chu kỳ 5 giây; Grafana trực quan hoá metric thành biểu đồ
+        thời gian thực.
+  \item \textbf{MySQL 8.4:} hệ quản trị cơ sở dữ liệu quan hệ, lưu trữ dữ liệu
+        tổng hợp dạng time-series.
+  \item \textbf{GZIP:} thuật toán nén không mất mát, dùng để nén các lô dữ liệu
+        trước khi truyền qua WAN.
+  \item \textbf{Raspberry Pi 3:} máy tính nhúng một bo mạch với CPU ARM
+        Cortex-A53 bốn nhân 1.2 GHz, 1 GB RAM, Wi-Fi tích hợp --- đại diện cho
+        thiết bị biên tài nguyên thấp.
+\end{itemize}
+
+\section{Các chỉ số hiệu năng}
+
+Đồ án đo lường tám chỉ số hiệu năng được định nghĩa đầy đủ trong
+\Cref{tab:chiso}.
+
+\begin{table}[H]
+\centering
+\caption{Tám chỉ số hiệu năng được đo lường}
+\label{tab:chiso}
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{p{0.20\textwidth} c c p{0.20\textwidth} p{0.28\textwidth}}
+\toprule
+\textbf{Chỉ số} & \textbf{Ký hiệu} & \textbf{Đơn vị} & \textbf{Cách đo} & \textbf{Ý nghĩa} \\
+\midrule
+Storm Complete Latency & $L_{complete}$ & ms    & Prometheus (StormExporter) & Thời gian 1 tuple từ Spout $\to$ Ack \\
+Bolt Capacity          & $C_{bolt}$     & \%    & Prometheus                 & \% thời gian bolt xử lý (\textgreater 100\% = quá tải) \\
+Bolt Execute Latency   & $L_{exec}$     & ms    & Prometheus                 & Thời gian thực thi 1 lần \code{execute()} \\
+End-to-End DB Latency  & $L_{e2e}$      & s     & MySQL query qua SSH        & Thời gian MQTT publish $\to$ ghi DB \\
+WAN Traffic            & $B_{WAN}$      & KB/min& Prometheus (gateway)       & Băng thông gateway $\to$ cloud \\
+Gateway RAM            & $M_{GW}$       & MB    & Docker stats               & Bộ nhớ mỗi gateway container \\
+Gateway CPU            & $P_{GW}$       & \%    & Docker stats               & Tải CPU mỗi gateway \\
+Store-Forward Queue    & $Q_{depth}$    & batch & Prometheus                 & Số batch đang chờ trong disk queue \\
+\bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\section{Công trình liên quan}
+
+Hướng nghiên cứu Fog/Edge Computing cho IoT đã thu hút nhiều công trình. Bonomi
+và cộng sự \cite{bonomi2012} là những người đầu tiên hệ thống hoá vai trò của Fog
+Computing trong IoT. NIST \cite{nist2018} và OpenFog Consortium
+\cite{openfog2017} chuẩn hoá định nghĩa và kiến trúc tham chiếu. Shi và cộng sự
+\cite{shi2016} phân tích Edge Computing như một hướng đi tất yếu khi dữ liệu biên
+tăng nhanh. Yi và cộng sự \cite{yi2015} khảo sát các nền tảng và thách thức của
+Fog. Trong lĩnh vực xử lý luồng, Apache Storm \cite{storm} và mô hình
+Heron/Storm của Twitter \cite{toshniwal2014} được dùng rộng rãi cho phân tích
+thời gian thực. Các nghiên cứu về MQTT \cite{mqtt} cho IoT và về cơ chế
+store-and-forward \cite{psaras2018} cung cấp nền tảng cho thiết kế chịu lỗi của
+đồ án. So với các công trình mô hình hoá topology gắn thẻ (tagged) trải dài giữa
+Fog và Cloud trong \textit{cùng một} topology, đồ án này tách hẳn Fog và Cloud
+thành \textit{hai} triển khai Storm độc lập, kết nối qua MQTT mang aggregate nén
+--- một cách tiếp cận giảm triệt để lưu lượng WAN và cho phép biên hoạt động độc
+lập khi Cloud mất kết nối.
+
+%% ############################################################################
+\chapter{THIẾT KẾ VÀ CÀI ĐẶT HỆ THỐNG}
+\label{ch:thietke}
+%% ############################################################################
+
+\section{Kiến trúc tổng thể}
+
+Đồ án xây dựng và so sánh hai kiến trúc xử lý cho cùng một bài toán giám sát điện
+năng. \Cref{fig:arch-compare} đặt cạnh nhau hai kiến trúc Monolithic và Fog.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.6cm,
+  box/.style={draw, rounded corners, align=center, minimum height=1cm, font=\small, fill=boxGray},
+  cloud/.style={draw, rounded corners, align=center, minimum height=1cm, font=\small, fill=accentBlue!12},
+  arr/.style={-{Stealth[length=2.5mm]}, thick}
+]
+%% --- Monolithic (trái) ---
+\node[font=\bfseries] (m0) {(a) Monolithic};
+\node[box, below=0.5cm of m0] (msrc) {Sensor /\\ Publisher};
+\node[cloud, below=of msrc, text width=4cm] (mcloud)
+  {\textbf{EC2 t3.large}\\ MQTT Broker + Storm\\ (Spout + Bolt\_split +\\ avg + sum + forecast)\\ + MySQL + Prometheus\\ + Grafana};
+\draw[arr] (msrc) -- node[right, font=\scriptsize]{MQTT raw} (mcloud);
+
+%% --- Fog (phải) ---
+\node[font=\bfseries, right=4.5cm of m0] (f0) {(b) Fog};
+\node[box, below=0.5cm of f0] (fsrc) {Sensor /\\ Publisher};
+\node[box, below=of fsrc, text width=4cm] (fgw)
+  {\textbf{Fog Gateway (Pi 3)}\\ Storm LocalCluster\\ Spout\_mqtt + Bolt\_ingest};
+\node[box, right=1.8cm of fgw, text width=2.2cm, fill=fog1Orange!18] (qd)
+  {Disk Queue\\ \code{queue.jsonl}};
+\node[cloud, below=of fgw, text width=4cm] (fcloud)
+  {\textbf{EC2 t3.small}\\ Storm (Spout +\\ Bolt\_cloudMerge)\\ + MySQL + Prometheus\\ + Grafana};
+\draw[arr] (fsrc) -- node[right, font=\scriptsize]{MQTT raw} (fgw);
+\draw[arr] (fgw) -- node[right, font=\scriptsize]{MQTT GZIP batch} (fcloud);
+\draw[arr, dashed] (fgw) -- node[midway, above, font=\scriptsize]{S\&F} (qd);
+\end{tikzpicture}
+\caption{So sánh kiến trúc Monolithic (a) và Fog (b).}
+\label{fig:arch-compare}
+\end{figure}
+
+Điểm khác biệt cốt lõi: trong kiến trúc Monolithic, mọi bản tin thô đều được đẩy
+thẳng lên Cloud và toàn bộ pipeline tổng hợp chạy tập trung. Trong kiến trúc Fog,
+gateway biên tổng hợp dữ liệu \textit{trước}, chỉ truyền các lô đã nén lên Cloud,
+và có hàng đợi đĩa dự phòng cho tình huống mất kết nối.
+
+\section{Kiến trúc Monolithic}
+
+Topology Monolithic xử lý dữ liệu theo \textbf{tám cửa sổ thời gian}
+(1, 5, 10, 15, 20, 30, 60, 120 phút). \Cref{fig:mono-topo} mô tả luồng xử lý.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=1.0cm and 1.4cm,
+  sp/.style={draw, ellipse, align=center, font=\small, fill=accentBlue!12, minimum width=2.2cm},
+  bo/.style={draw, rounded corners, align=center, font=\small, fill=boxGray, minimum height=0.9cm},
+  arr/.style={-{Stealth[length=2.5mm]}, thick}
+]
+\node[sp] (spd) {Spout\_data};
+\node[bo, right=of spd] (split) {Bolt\_split\\(phân loại theo\\ time-window)};
+\node[bo, right=2.4cm of split, yshift=2.2cm] (avg) {Bolt\_avg\\(trung bình,\\ flush DB)};
+\node[bo, right=2.4cm of split] (sum) {Bolt\_sum\\(tổng hợp\\ household)};
+\node[bo, right=2.4cm of split, yshift=-2.2cm] (fc) {Bolt\_forecast\\(dự báo)};
+\node[sp, below=2.6cm of spd] (spt) {Spout\_trigger};
+\draw[arr] (spd) -- (split);
+\draw[arr] (split) -- (avg);
+\draw[arr] (split) -- (sum);
+\draw[arr] (split) -- (fc);
+\draw[arr] (spt) -| node[below, font=\scriptsize, pos=0.25]{kích hoạt flush định kỳ} (avg);
+\end{tikzpicture}
+\caption{Topology Monolithic: Spout\_data $\to$ Bolt\_split $\to$ \{avg, sum, forecast\}.}
+\label{fig:mono-topo}
+\end{figure}
+
+Lược đồ cơ sở dữ liệu Monolithic là bảng \code{device\_data} với khoá chính phức
+hợp \code{(house\_id, household\_id, device\_id, year, month, day, slice\_gap,
+slice\_index)}, lưu giá trị trung bình theo từng cửa sổ thời gian.
+
+\textbf{Điểm nghẽn:} \code{Bolt\_split} phải xử lý 100\% bản tin thô và phân loại
+chúng vào tám cửa sổ thời gian cho từng thiết bị. Với cấu hình hiện tại, bolt này
+không song song hoá hiệu quả, trở thành điểm nghẽn khi tải vượt 200 msg/s. Đây
+chính là nguyên nhân bão hoà sẽ được phân tích định lượng trong
+\Cref{ch:ketqua-mono}.
+
+\section{Kiến trúc Fog --- Thiết kế từng thành phần}
+
+\subsection{Fog Gateway (Raspberry Pi 3)}
+\label{sec:fog-gw}
+
+Tầng biên Fog được triển khai theo hai kịch bản:
+
+\textbf{Kịch bản 8 gateway (KB1-A, KB2-A):} hệ thống gồm \textbf{7 container Docker}
+chạy trên máy chủ phát triển và \textbf{1 Raspberry Pi 3 vật lý} chạy gateway
+gw-08, phụ trách 5 ngôi nhà cuối cùng (house-35 đến house-39) --- tổng cộng 8
+gateway, mỗi gateway phụ trách 5 nhà. Pi 3 chạy container \code{fog-gateway:latest},
+kết nối Wi-Fi tới MQTT simulator và Cloud EC2.
+
+\textbf{Kịch bản 1 gateway (KB1-B, KB2-B):} \textbf{một Raspberry Pi 3 duy nhất}
+chạy toàn bộ gateway, phụ trách tất cả 40 nhà, thể hiện khả năng triển khai trên
+thiết bị nhúng tài nguyên thấp.
+
+\Cref{fig:deploy-gw} minh hoạ sơ đồ triển khai tầng biên.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, font=\small, fill=boxGray, minimum height=0.9cm},
+  pi/.style={draw, rounded corners, align=center, font=\small, fill=fog1Orange!18, minimum height=0.9cm},
+  cl/.style={draw, rounded corners, align=center, font=\small, fill=accentBlue!12, minimum height=0.9cm},
+  arr/.style={-{Stealth[length=2.5mm]}, thick}
+]
+\node[box, text width=5cm] (docker)
+  {\textbf{MacBook / Server}\\ 7 container Docker:\\ gw-01 \dots\ gw-07};
+\node[pi, right=2.0cm of docker, text width=3.6cm] (pi)
+  {\textbf{Raspberry Pi 3}\\ ARM Cortex-A53 1.2GHz\\ 1GB RAM, Docker\\ gw-08};
+\node[cl, below=1.6cm of $(docker)!0.5!(pi)$, text width=4cm] (ec2)
+  {\textbf{EC2 Cloud}\\ Storm + MySQL +\\ Prometheus + Grafana};
+\draw[arr] (docker) -- node[left, font=\scriptsize, pos=0.6]{MQTT GZIP} (ec2);
+\draw[arr] (pi) -- node[right, font=\scriptsize, pos=0.6]{MQTT GZIP} (ec2);
+\end{tikzpicture}
+\caption{Sơ đồ triển khai tầng biên kịch bản 8 gateway: 7 container Docker + 1 Raspberry Pi 3.}
+\label{fig:deploy-gw}
+\end{figure}
+
+\subsection{Storm LocalCluster tại Gateway}
+
+Topology gateway tối giản: \code{Spout\_mqtt} $\to$ \code{Bolt\_ingest}. Bolt
+\code{Bolt\_ingest} thực hiện năm bước:
+
+\begin{enumerate}
+  \item Subscribe MQTT topic \code{iot-data}.
+  \item Parse JSON payload \code{\{house\_id, household\_id, device\_id, value, event\_ts\}}.
+  \item Cập nhật \textbf{5 accumulator} (\code{ConcurrentHashMap}) theo 5 cửa sổ
+        thời gian 1, 5, 10, 15, 30 phút --- mỗi accumulator lưu cặp
+        \textit{(count, sum)}, \textbf{không lưu dữ liệu thô}.
+  \item Flush mỗi 60 giây: serialize toàn bộ accumulator $\to$ JSON $\to$ GZIP
+        $\to$ MQTT publish lên topic \code{fog-data} của Cloud.
+  \item \textbf{Store-and-Forward:} nếu publish thất bại, ghi lô vào tệp
+        \code{queue.jsonl} trên đĩa.
+\end{enumerate}
+
+\Cref{fig:ingest-flow} mô tả luồng xử lý của \code{Bolt\_ingest}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.85cm,
+  io/.style={draw, trapezium, trapezium left angle=70, trapezium right angle=110, align=center, font=\scriptsize, fill=accentBlue!12, minimum width=2.4cm},
+  proc/.style={draw, rounded corners, align=center, font=\scriptsize, fill=boxGray, minimum width=3.2cm, minimum height=0.8cm},
+  dec/.style={draw, diamond, aspect=2, align=center, font=\scriptsize, fill=fog8Green!15, inner sep=1pt},
+  qd/.style={draw, align=center, font=\scriptsize, fill=fog1Orange!18, minimum width=2.6cm, minimum height=0.8cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[io] (in) {Nhận MQTT tuple};
+\node[proc, below=of in] (parse) {Parse JSON payload};
+\node[proc, below=of parse] (acc) {Cập nhật 5 accumulator\\ (count++, sum += value)};
+\node[dec, below=of acc] (timer) {Đến hạn\\ flush 60s?};
+\node[proc, below=1.0cm of timer] (ser) {Serialize + GZIP batch};
+\node[dec, below=of ser] (pub) {MQTT\\ publish OK?};
+\node[proc, below=1.0cm of pub] (clear) {Xoá batch (thành công)};
+\node[qd, right=1.6cm of pub] (queue) {append \code{queue.jsonl}};
+\draw[arr] (in) -- (parse);
+\draw[arr] (parse) -- (acc);
+\draw[arr] (acc) -- (timer);
+\draw[arr] (timer) -- node[right, font=\scriptsize]{Có} (ser);
+\draw[arr] (timer.east) -- ++(2.6,0) |- node[pos=0.25, right, font=\scriptsize]{Chưa: chờ tuple} (in.east);
+\draw[arr] (ser) -- (pub);
+\draw[arr] (pub) -- node[right, font=\scriptsize]{Có} (clear);
+\draw[arr] (pub) -- node[above, font=\scriptsize]{Không} (queue);
+\end{tikzpicture}
+\caption{Lưu đồ xử lý của \code{Bolt\_ingest}: parse $\to$ tích luỹ $\to$ flush $\to$ (thành công / queue).}
+\label{fig:ingest-flow}
+\end{figure}
+
+\subsection{Cơ chế Store-and-Forward}
+\label{sec:saf}
+
+Cơ chế Store-and-Forward được mô hình hoá bằng máy trạng thái trong
+\Cref{fig:saf-sm}. Khi MQTT publish thành công, hệ thống ở trạng thái
+\textsc{Online} và xoá batch. Khi publish thất bại (Cloud offline), hệ thống
+chuyển sang \textsc{Offline}, ghi batch vào \code{queue.jsonl}. Khi kết nối phục
+hồi, hàm \code{drainQueue()} đọc tuần tự hàng đợi và publish lại từng entry, xoá
+entry khi thành công.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  st/.style={draw, circle, align=center, font=\small, minimum size=1.8cm},
+  arr/.style={-{Stealth[length=2.5mm]}, thick}
+]
+\node[st, fill=fog8Green!18] (on) {ONLINE};
+\node[st, fill=monoRed!15, right=4.5cm of on] (off) {OFFLINE};
+\draw[arr] (on) to[bend left=18] node[above, font=\scriptsize]{MQTT fail $\to$ append queue} (off);
+\draw[arr] (off) to[bend left=18] node[below, font=\scriptsize]{kết nối lại $\to$ drainQueue()} (on);
+\draw[arr] (on) to[loop above] node[above, font=\scriptsize]{MQTT ok $\to$ clear batch} (on);
+\draw[arr] (off) to[loop above] node[above, font=\scriptsize]{tiếp tục append batch} (off);
+\end{tikzpicture}
+\caption{Máy trạng thái Store-and-Forward: ONLINE $\leftrightarrow$ OFFLINE.}
+\label{fig:saf-sm}
+\end{figure}
+
+\textbf{Tính toán dung lượng hàng đợi:} mỗi gateway sinh ra
+$5 \text{ windows} \times 5 \text{ flush cycles}$ trong 5 phút mất kết nối
+$= 25$ batch. Với 8 gateway, tổng số batch tối đa là $8 \times 25 = 200$ batch ---
+con số sẽ được kiểm chứng trong \Cref{ch:ketqua-fog}.
+
+\subsection{Energy Optimizer --- Tự động tiết kiệm tài nguyên}
+\label{sec:energy}
+
+Một daemon Node.js (\code{tools/energy\_optimizer.js}) chạy song song với hệ
+thống Fog, thực hiện \textbf{auto-scaling thông minh} tại tầng biên.
+
+\textbf{Nguyên lý hoạt động:}
+\begin{enumerate}
+  \item Daemon subscribe topic MQTT \code{iot-data}, parse \code{houseId} từ mỗi
+        bản tin.
+  \item Cập nhật \code{gwLastSeen[gw] = Date.now()} cho gateway phụ trách nhà đó
+        (ánh xạ: $\lfloor house\_id / 5 \rfloor + 1 = gw\_num$).
+  \item Mỗi 3 giây, kiểm tra: nếu
+        \code{Date.now() - gwLastSeen[gw] > 15000ms} $\to$ gateway nhàn rỗi $\to$
+        \code{docker pause gw-0N}.
+  \item Nếu traffic quay lại $\to$ \code{docker unpause gw-0N} để tiếp tục xử lý.
+\end{enumerate}
+
+\textbf{Tại sao dùng \code{docker pause} thay vì \code{docker stop}?} Lệnh
+\code{docker stop} sẽ shutdown JVM, restart mất khoảng 10 giây và làm mất toàn bộ
+accumulator state trong bộ nhớ. Ngược lại, \code{docker pause} dùng cơ chế
+\textit{cgroups freezer} của Linux để đóng băng tiến trình: RAM được giữ nguyên,
+CPU về 0\%, không mất state, và độ trễ unpause dưới 50 ms (xác nhận từ log:
+\code{[ACTIVATE]} $\to$ \code{[SUCCESS]} trong khoảng 100 ms).
+
+\textbf{Tiết kiệm tài nguyên:} một JVM gateway nhàn rỗi tiêu tốn khoảng 200 MB
+RAM và 2--5\% CPU; khi bị pause, nó vẫn giữ 200 MB RAM nhưng CPU về \textbf{0\%}.
+Trong kịch bản thực tế (ví dụ nấc h10 chỉ có 2 gateway active), 6 gateway nhàn rỗi
+được pause, tiết kiệm khoảng 12--30\% CPU của máy chủ.
+
+\Cref{fig:gw-life} mô tả vòng đời gateway. Lưu ý: kịch bản Fog-1GW không dùng
+Energy Optimizer vì chỉ có một gateway --- không có gì để pause chọn lọc.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  st/.style={draw, rounded corners, align=center, font=\small, minimum width=2.6cm, minimum height=1.0cm},
+  arr/.style={-{Stealth[length=2.5mm]}, thick}
+]
+\node[st, fill=fog8Green!18] (run) {RUNNING};
+\node[st, fill=boxGray, right=4.5cm of run] (pause) {PAUSED\\ (cgroups freezer)};
+\draw[arr] (run) to[bend left=20] node[above, font=\scriptsize]{nhàn rỗi \textgreater 15s $\to$ docker pause} (pause);
+\draw[arr] (pause) to[bend left=20] node[below, font=\scriptsize]{traffic quay lại $\to$ unpause \textless 50ms} (run);
+\end{tikzpicture}
+\caption{Máy trạng thái vòng đời gateway dưới điều khiển của Energy Optimizer.}
+\label{fig:gw-life}
+\end{figure}
+
+\subsection{Cloud Storm Topology (Fog)}
+
+Topology Cloud trong kiến trúc Fog đơn giản hơn Monolithic rất nhiều --- chỉ gồm
+một bolt: \code{Spout\_mqtt} (subscribe \code{fog-data}) $\to$
+\code{Bolt\_cloudMerge} (REPLACE INTO MySQL). \Cref{fig:fog-topo} thể hiện toàn bộ
+pipeline Fog từ biên đến Cloud.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=1.0cm,
+  sp/.style={draw, ellipse, align=center, font=\scriptsize, fill=accentBlue!12, minimum width=1.8cm},
+  bo/.style={draw, rounded corners, align=center, font=\scriptsize, fill=boxGray, minimum height=0.8cm},
+  db/.style={draw, cylinder, shape border rotate=90, aspect=0.3, align=center, font=\scriptsize, fill=fog8Green!12, minimum height=1cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[sp] (sm) {Spout\_mqtt};
+\node[bo, right=of sm] (bi) {Bolt\_ingest};
+\node[bo, right=1.4cm of bi, fill=accentBlue!10] (sm2) {Spout\_mqtt\\ (cloud)};
+\node[bo, right=of sm2] (cm) {Bolt\_cloudMerge};
+\node[db, right=of cm] (my) {MySQL};
+\node[font=\scriptsize, above=0.1cm of sm] {\textbf{Gateway (Pi 3)}};
+\node[font=\scriptsize, above=0.1cm of cm] {\textbf{Cloud (EC2)}};
+\draw[arr] (sm) -- (bi);
+\draw[arr] (bi) -- node[above, font=\scriptsize, align=center]{MQTT\\GZIP} (sm2);
+\draw[arr] (sm2) -- (cm);
+\draw[arr] (cm) -- node[above, font=\scriptsize, align=center]{REPLACE\\INTO} (my);
+\end{tikzpicture}
+\caption{Pipeline Fog đầy đủ: từ gateway (Spout\_mqtt $\to$ Bolt\_ingest) đến Cloud (Spout\_mqtt $\to$ Bolt\_cloudMerge $\to$ MySQL).}
+\label{fig:fog-topo}
+\end{figure}
+
+\code{Bolt\_cloudMerge.execute()} thực hiện: (1) nhận lô MQTT đã nén GZIP,
+(2) giải nén và parse các bản ghi JSON đã tổng hợp, (3) thực thi một lệnh
+\code{REPLACE INTO fog\_device\_data (...) VALUES (...)}, (4) đảm bảo tính
+idempotent --- cùng khoá sẽ được ghi đè, không tạo dòng trùng. Lược đồ Cloud là
+bảng \code{fog\_device\_data} với các cột \code{(house\_id, household\_id,
+device\_id, slice\_gap, slice\_index, value, count, updatedAt)}.
+
+\section{Khắc phục lỗi đo lường metric Prometheus (bug fix)}
+\label{sec:prometheus-fix}
+
+\textit{Phần này mô tả một bản vá lỗi (bug fix), \textbf{không phải} một cải tiến
+kiến trúc.} Nó được trình bày riêng ở đây vì là điều kiện tiên quyết để toàn bộ số
+liệu đo lường trong \Cref{ch:ketqua-fog} đáng tin cậy; các cải tiến kỹ thuật thực
+sự của kiến trúc Fog được trình bày trong \Cref{sec:improvements}.
+
+Phiên đo đầu tiên (June 14--16) gặp một lỗi phần mềm làm sai lệch toàn bộ số liệu
+gateway. Khi Storm LocalCluster restart một bolt task trong cùng JVM (lần gọi
+\code{prepare()} thứ hai), lệnh \code{new PrometheusMetricsServer(port)} ném
+\code{IOException: Address already in use}, khiến biến \code{metrics} bị gán
+\code{null} và mọi counter (\code{incrementTuplesProcessed()}\dots) bị bỏ qua
+\textit{một cách âm thầm} (silent failure) --- không có exception lan ra ngoài.
+Hệ quả là các gateway gw-03 đến gw-08 không báo bất kỳ metric nào, khiến
+Prometheus/Grafana chỉ ``nhìn thấy'' 2/8 gateway hoạt động, dẫn tới kết luận sai
+rằng tải dồn hết vào hai gateway đầu.
+
+Nguyên nhân gốc là vòng đời cổng (port) không được quản lý xuyên suốt các lần
+\code{prepare()}. Giải pháp dùng một \code{ConcurrentHashMap<Integer,
+PrometheusMetricsServer>} ở phạm vi \code{static} làm sổ đăng ký (registry) toàn
+JVM, kết hợp \code{computeIfAbsent}: nếu cổng đã được bind thì tái sử dụng instance
+cũ thay vì tạo mới. Sau khi vá, cả 8 gateway báo metric chính xác và phiên đo được
+thực hiện lại ngày 2026-06-28. Bài học rút ra là: trong môi trường đo lường, một
+\textit{silent failure} ở tầng quan trắc nguy hiểm hơn một lỗi gây dừng chương
+trình, vì nó tạo ra số liệu trông hợp lệ nhưng sai.
+
+\begin{lstlisting}[language=Java,caption={Singleton METRIC\_REGISTRY với computeIfAbsent}]
+private static final ConcurrentHashMap<Integer, PrometheusMetricsServer>
+    METRIC_REGISTRY = new ConcurrentHashMap<>();
+
+// Trong prepare(): reuse server neu cong da bind, tranh IOException
+this.metrics = METRIC_REGISTRY.computeIfAbsent(port,
+    p -> new PrometheusMetricsServer(p));
+\end{lstlisting}
+
+\section{Mười cải tiến kỹ thuật so với Monolithic}
+\label{sec:improvements}
+
+Đây là phần đóng góp kỹ thuật trọng tâm của đồ án. Kiến trúc Fog không chỉ ``dời''
+việc xử lý xuống biên mà tái thiết kế lại từng thành phần của pipeline. Phần này
+phân tích sâu \textbf{mười cải tiến} ở cấp độ kiến trúc: với mỗi cải tiến, đồ án
+trình bày \textit{vấn đề gốc} của Monolithic, \textit{cơ chế} giải quyết của Fog
+(kèm sơ đồ luồng hoặc mã giả khi cần), \textit{sự đánh đổi} đi kèm, và
+\textit{tác động đo được} trên số liệu thực nghiệm. \Cref{tab:improvements} tóm
+tắt trước toàn bộ; các tiểu mục sau phân tích chi tiết.
+
+{\scriptsize
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{c p{0.16\textwidth} p{0.24\textwidth} p{0.24\textwidth} p{0.18\textwidth}}
+\caption{Mười cải tiến kỹ thuật của kiến trúc Fog so với Monolithic}
+\label{tab:improvements}\\
+\toprule
+\textbf{\#} & \textbf{Thành phần} & \textbf{Vấn đề Monolithic} & \textbf{Giải pháp Fog} & \textbf{Tác động} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{\#} & \textbf{Thành phần} & \textbf{Vấn đề Monolithic} & \textbf{Giải pháp Fog} & \textbf{Tác động} \\
+\midrule
+\endhead
+1  & Xử lý raw data & Bolt\_split nhận 100\% raw (400 msg/s) $\to$ 169\% capacity & Tích luỹ gia tăng trong memory, không fan-out & GW bolt capacity \textbf{\textless 1\%} \\
+2  & 5 time windows & 8 windows qua 4 bolt $\to$ $O(n{\times}8)$ tuple & 5 windows trong 1 bolt, 1 accumulator dict & Không có traffic nội bộ \\
+3  & GZIP batch & Raw JSON từng message lên cloud & 60s buffer $\to$ GZIP batch & WAN giảm \textbf{$\sim$86\%} \\
+4  & Store-and-Forward & Cloud offline = 100\% mất dữ liệu & \code{queue.jsonl} + drainQueue() & \textbf{0\%} loss, 96s recovery \\
+5  & EWMA Z-score & Không có phát hiện bất thường & EWMA $\mu/\sigma$ mỗi device, alert nếu $|z|>3$ & Phát hiện anomaly tại biên \\
+6  & Slack routing & Không có cảnh báo & Webhook riêng mỗi nhà & Alert \textless 1s \\
+7  & TagAwareScheduler & Storm không bảo đảm affinity & Gán executor đúng supervisor theo tag & Ổn định assignment \\
+8  & REPLACE INTO & INSERT $\to$ rủi ro trùng khi retry & \code{REPLACE INTO} + composite PK & \textbf{0} dòng trùng \\
+9  & Cloud topology & 4 bolt + 8 window streams & 1 bolt (Bolt\_cloudMerge) & Cloud capacity \textbf{0\%} tại h40 \\
+10 & Energy Optimizer & Idle JVM tiêu 2--5\% CPU & Daemon \code{docker pause} GW idle \textgreater 15s, unpause \textless 50ms & CPU idle \textbf{0\%} \\
+\bottomrule
+\end{longtable}
+\renewcommand{\arraystretch}{1.0}
+}
+
+\subsection{Cải tiến 1 --- Tích luỹ gia tăng thay cho fan-out}
+
+\textbf{Vấn đề gốc.} Trong kiến trúc Monolithic, mỗi bản tin thô đến
+\code{Bolt\_split} bị \textit{nhân bản} (fan-out) thành nhiều tuple --- một tuple
+cho mỗi cửa sổ thời gian và mỗi nhánh tổng hợp. Với tám cửa sổ, một bản tin đầu
+vào có thể sinh ra hàng chục tuple nội bộ. Mỗi tuple đó lại phải được serialize,
+đẩy vào hàng đợi giữa các executor, được ack riêng và đôi khi tái phân phối qua
+mạng. Hệ quả là khối lượng tuple lưu thông trong topology tăng theo cấp số nhân so
+với số bản tin đầu vào: quan sát thực tế cho tỷ lệ \code{emitted/acked} vượt
+\textbf{50:1}. Đây chính là nguyên nhân gốc rễ khiến \code{Bolt\_split} đạt
+\textbf{169\%} capacity tại 400 msg/s.
+
+\textbf{Cơ chế Fog.} Kiến trúc Fog thay mô hình fan-out bằng \textbf{tích luỹ gia
+tăng} (incremental accumulation). Thay vì phát tuple, \code{Bolt\_ingest} chỉ cập
+nhật \textit{tại chỗ} cặp \textit{(count, sum)} trong bộ nhớ cho mỗi cửa sổ
+(\code{count++}, \code{sum += value}). \Cref{fig:imp-fanout} đối chiếu trực tiếp
+hai mô hình: bên Monolithic, một bản tin lan thành ``cây tuple''; bên Fog, một bản
+tin chỉ chạm vào vài ô nhớ rồi kết thúc.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, font=\scriptsize, minimum height=0.8cm},
+  arr/.style={-{Stealth[length=2mm]}, thick}
+]
+%% (a) Monolithic fan-out
+\node[font=\bfseries\scriptsize] (ta) {(a) Monolithic --- fan-out};
+\node[box, fill=accentBlue!12, below=0.35cm of ta] (am) {1 bản\\ tin};
+\node[box, fill=monoRed!22, right=0.9cm of am] (as) {Bolt\_split};
+\node[box, fill=monoRed!10, right=0.9cm of as, text width=1.7cm] (at) {$\times 8$ tuple\\ (8 cửa sổ)};
+\node[box, fill=boxGray, right=0.9cm of at, text width=1.7cm] (ab) {4 tầng bolt\\ (avg/sum/\dots)};
+\draw[arr] (am) -- (as);
+\draw[arr] (as) -- node[above, font=\tiny]{nhân bản} (at);
+\draw[arr] (at) -- (ab);
+%% (b) Fog accumulate
+\node[font=\bfseries\scriptsize, below=1.7cm of ta, anchor=west, xshift=-0.0cm] (tb) {(b) Fog --- tích luỹ gia tăng};
+\node[box, fill=accentBlue!12, below=0.35cm of tb] (bm) {1 bản\\ tin};
+\node[box, fill=fog8Green!20, right=0.9cm of bm, text width=2.2cm] (bi) {Bolt\_ingest:\\ count++, sum+=value};
+\node[box, fill=fog8Green!8, right=0.9cm of bi, text width=1.7cm] (bz) {0 tuple\\ mạng};
+\draw[arr] (bm) -- (bi);
+\draw[arr] (bi) -- node[above, font=\tiny]{cập nhật ô nhớ} (bz);
+\end{tikzpicture}
+\caption{So sánh fan-out (Monolithic) và tích luỹ gia tăng (Fog) cho một bản tin đầu vào.}
+\label{fig:imp-fanout}
+\end{figure}
+
+\textbf{Đánh đổi và tác động.} Toàn bộ chi phí xử lý một bản tin ở Fog chỉ là vài
+phép gán trên \code{ConcurrentHashMap}, nên execute latency của gateway luôn dưới
+\textbf{0,1 ms} và bolt capacity giữ dưới \textbf{1\%} ngay cả ở tải đỉnh
+(\Cref{tab:fog-kb1a}). Cái giá phải trả là gateway chỉ lưu \textit{trạng thái tổng
+hợp} chứ không giữ chuỗi sự kiện gốc --- nghĩa là không thể truy vấn lại từng số
+đọc thô sau khi đã tổng hợp. Với bài toán giám sát điện năng theo cửa sổ thời
+gian, đây là đánh đổi hoàn toàn chấp nhận được, thậm chí có lợi vì giảm cả lưu trữ
+lẫn băng thông.
+
+\subsection{Cải tiến 2 --- Năm cửa sổ trong một bolt}
+
+\textbf{Vấn đề gốc.} Monolithic phân tán tám cửa sổ thời gian qua bốn tầng bolt
+(\code{split} $\to$ \code{avg} $\to$ \code{sum} $\to$ \code{forecast}), tạo ra độ
+phức tạp $O(n \times 8)$ tuple với $n$ là số bản tin. Việc trải logic qua nhiều
+tầng còn làm phát sinh \textit{phụ thuộc thứ tự} và chi phí đồng bộ giữa các bolt.
+
+\textbf{Cơ chế Fog.} Kiến trúc Fog gộp toàn bộ năm cửa sổ (1, 5, 10, 15, 30 phút)
+vào \textbf{một từ điển accumulator duy nhất} trong \code{Bolt\_ingest}. Khoá là
+bộ \textit{(device, window)}, giá trị là cặp \textit{(count, sum)}.
+\Cref{fig:imp-acc} minh hoạ: một số đọc 254\,W của thiết bị $d$ chỉ cập nhật năm ô
+tương ứng với năm cửa sổ, mỗi ô là một phép cộng dồn $O(1)$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  cell/.style={draw, align=center, font=\scriptsize, minimum width=3.0cm, minimum height=0.65cm, fill=fog8Green!10},
+  arr/.style={-{Stealth[length=2mm]}, thick}
+]
+\node[draw, rounded corners, fill=accentBlue!12, align=center, font=\scriptsize] (r) {Số đọc mới\\ $d=$Plug0, $x=254$\,W};
+\node[cell, right=1.4cm of r, yshift=1.3cm] (w1) {(d,\,1m) $\to$ (count, sum)};
+\node[cell, below=0.12cm of w1] (w2) {(d,\,5m) $\to$ (count, sum)};
+\node[cell, below=0.12cm of w2] (w3) {(d,\,10m) $\to$ (count, sum)};
+\node[cell, below=0.12cm of w3] (w4) {(d,\,15m) $\to$ (count, sum)};
+\node[cell, below=0.12cm of w4] (w5) {(d,\,30m) $\to$ (count, sum)};
+\node[draw, dashed, fit=(w1)(w5), inner sep=4pt, label={[font=\tiny]above:ConcurrentHashMap}] (box) {};
+\foreach \w in {w1,w2,w3,w4,w5} \draw[arr] (r.east) -- (\w.west);
+\end{tikzpicture}
+\caption{Một số đọc cập nhật đồng thời năm ô accumulator (mỗi cửa sổ một ô), không sinh tuple.}
+\label{fig:imp-acc}
+\end{figure}
+
+\textbf{Tác động.} Độ phức tạp giảm từ $O(n \times 8)$ tuple mạng (Monolithic)
+xuống $O(1)$ thao tác bộ nhớ trên mỗi bản tin (Fog). Vì không còn tuple nội bộ
+giữa các bolt, gateway không phát sinh \textit{bất kỳ} lưu lượng mạng nội bộ nào
+--- một điều kiện then chốt giúp thiết bị Raspberry Pi 3 tài nguyên thấp vẫn xử lý
+được 50 msg/s với headroom lớn.
+
+\subsection{Cải tiến 3 --- Nén GZIP theo lô}
+
+\textbf{Vấn đề gốc.} Monolithic đẩy từng bản tin JSON thô lên Cloud ngay khi nhận,
+nên lưu lượng WAN tỷ lệ thuận với tốc độ bản tin (ước tính 2.400 KB/min tại
+400 msg/s) và bùng nổ mỗi khi có burst. Băng thông WAN vừa đắt vừa khó dự đoán.
+
+\textbf{Cơ chế Fog.} Kiến trúc Fog kết hợp hai kỹ thuật, minh hoạ ở
+\Cref{fig:imp-gzip}: \textbf{(1) traffic shaping} --- mỗi gateway gom dữ liệu trong
+cửa sổ 60 giây rồi mới flush một lần, nên Cloud không bao giờ thấy burst; và
+\textbf{(2) nén GZIP} --- dữ liệu tổng hợp dạng JSON có tính lặp cao (cùng tên
+trường, cùng cấu trúc lặp lại) nên đạt tỷ lệ nén rất tốt.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, font=\scriptsize, minimum height=0.9cm, text width=2.2cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[box, fill=accentBlue!12] (a) {Buffer 60s\\ ($\sim$600 số đọc)};
+\node[box, fill=boxGray, right=1.0cm of a] (b) {Serialize JSON\\ aggregate};
+\node[box, fill=fog1Orange!18, right=1.0cm of b] (c) {GZIP\\ $\to \sim$8,3 KB/batch};
+\node[box, fill=fog8Green!18, right=1.0cm of c] (d) {MQTT publish\\ topic fog-data};
+\draw[arr] (a) -- (b);
+\draw[arr] (b) -- (c);
+\draw[arr] (c) -- (d);
+\end{tikzpicture}
+\caption{Đường ống flush của gateway: gom 60s $\to$ serialize $\to$ nén GZIP $\to$ publish.}
+\label{fig:imp-gzip}
+\end{figure}
+
+\textbf{Tác động.} Lưu lượng WAN tại h40 chỉ còn \textbf{332,8 KB/min} --- giảm
+khoảng \textbf{86\%} so với raw streaming. Quan trọng không kém con số tuyệt đối là
+\textit{hình dạng} của lưu lượng: WAN gần như phẳng theo thời gian thay vì nhấp nhô
+theo burst, giúp việc cấp phát băng thông WAN trở nên dễ dự đoán. Một quan sát tinh
+tế (\Cref{ch:sosanh}) là cấu hình 1 gateway lại tốn WAN \textit{cao hơn} 8 gateway
+19\%, vì batch lớn chứa nhiều khoá khác nhau làm giảm tỷ lệ nén --- cho thấy hiệu
+quả nén phụ thuộc cấu trúc batch chứ không đơn thuần số lượng nguồn.
+
+\subsection{Cải tiến 4 --- Store-and-Forward chống mất dữ liệu}
+
+\textbf{Vấn đề gốc.} Trong Monolithic, nếu đường truyền tới Cloud (hoặc chính
+Cloud) gián đoạn, không có nơi nào lưu giữ dữ liệu --- toàn bộ số đọc trong thời
+gian gián đoạn mất vĩnh viễn (100\% data loss).
+
+\textbf{Cơ chế Fog.} Mỗi chu kỳ flush, gateway thử publish lô lên Cloud; nếu thất
+bại, lô được ghi nối tiếp xuống tệp \code{queue.jsonl} trên đĩa
+(\Cref{lst:flush}). Khi kết nối phục hồi, hàm \code{drainQueue()} đọc tuần tự hàng
+đợi và publish lại từng lô, chỉ xoá entry khi gửi thành công. Máy trạng thái tổng
+quát đã trình bày ở \Cref{fig:saf-sm}; \Cref{fig:imp-drain} chi tiết hoá logic
+\textit{drain} sau khi Cloud online trở lại.
+
+\begin{lstlisting}[language=Java,caption={Bolt\_ingest.flush() với Store-and-Forward},label={lst:flush}]
+void flush() {
+  byte[] batch = gzip(serialize(accumulators)); // count+sum snapshot
+  try {
+    mqtt.publish("fog-data", batch);            // duong di binh thuong
+  } catch (MqttException e) {
+    appendToDiskQueue("queue.jsonl", batch);    // store-and-forward
+  }
+  resetAccumulators();
+}
+\end{lstlisting}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.7cm,
+  io/.style={draw, rounded corners, align=center, font=\scriptsize, fill=accentBlue!12, minimum height=0.7cm},
+  dec/.style={draw, diamond, aspect=2.2, align=center, font=\scriptsize, fill=fog8Green!15, inner sep=1pt},
+  proc/.style={draw, align=center, font=\scriptsize, fill=boxGray, minimum height=0.7cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[io] (start) {Cloud online};
+\node[dec, below=of start] (empty) {queue rỗng?};
+\node[proc, below=1.0cm of empty] (read) {Đọc lô kế tiếp\\ từ queue.jsonl};
+\node[dec, below=of read] (pub) {publish OK?};
+\node[proc, below=1.0cm of pub] (del) {Xoá entry};
+\node[io, right=1.8cm of empty] (done) {Hoàn tất drain};
+\node[proc, right=1.8cm of pub] (stop) {Dừng,\\ chờ lần sau};
+\draw[arr] (start) -- (empty);
+\draw[arr] (empty) -- node[left, font=\tiny]{Không} (read);
+\draw[arr] (empty) -- node[above, font=\tiny]{Có} (done);
+\draw[arr] (read) -- (pub);
+\draw[arr] (pub) -- node[left, font=\tiny]{OK} (del);
+\draw[arr] (pub) -- node[above, font=\tiny]{lỗi} (stop);
+\draw[arr] (del) -| (empty);
+\end{tikzpicture}
+\caption{Lưu đồ \code{drainQueue()}: xả tuần tự hàng đợi đĩa sau khi Cloud phục hồi.}
+\label{fig:imp-drain}
+\end{figure}
+
+\textbf{Tác động.} Cơ chế này đạt \textbf{0\% mất dữ liệu} trong các thử nghiệm
+outage 5 phút (\Cref{ch:ketqua-fog}), với thời gian phục hồi 71--96 s. Nhờ ghi
+xuống đĩa (không chỉ giữ trong RAM), dữ liệu còn sống sót qua cả sự cố restart
+gateway.
+
+\subsection{Cải tiến 5 --- Phát hiện bất thường EWMA Z-score tại biên}
+
+\textbf{Vấn đề gốc.} Trong kiến trúc cloud-centric, muốn phát hiện bất thường phải
+chờ dữ liệu lên Cloud rồi mới phân tích --- vừa trễ, vừa tốn băng thông để truyền
+cả dữ liệu bình thường lẫn bất thường.
+
+\textbf{Cơ chế Fog.} \code{Bolt\_ingest} duy trì trung bình trượt có trọng số mũ
+($\mu$) và phương sai trượt ($\sigma^2$) cho \textit{mỗi thiết bị}, cập nhật theo
+hệ số làm mượt $\alpha = 0{,}1$:
+\begin{align}
+\mu_t &= (1-\alpha)\,\mu_{t-1} + \alpha\, x_t \\
+\sigma^2_t &= (1-\alpha)\,\sigma^2_{t-1} + \alpha\,(x_t - \mu_{t-1})^2 \\
+z_t &= \frac{x_t - \mu_t}{\sigma_t}
+\end{align}
+Nếu $|z_t| > 3$ (quy tắc ba-sigma), một cảnh báo được phát sinh ngay tại gateway.
+\Cref{fig:imp-ewma} mô tả luồng xử lý. EWMA được chọn thay cho trung bình cửa sổ
+trượt thông thường vì chỉ cần lưu \textit{hai số thực} cho mỗi thiết bị thay vì
+toàn bộ chuỗi giá trị --- phù hợp ràng buộc bộ nhớ của Raspberry Pi 3 --- đồng thời
+tự thích nghi với sự thay đổi chậm của nền tải điện.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.7cm,
+  io/.style={draw, rounded corners, align=center, font=\scriptsize, fill=accentBlue!12, minimum height=0.7cm},
+  proc/.style={draw, align=center, font=\scriptsize, fill=boxGray, minimum height=0.7cm},
+  dec/.style={draw, diamond, aspect=2.2, align=center, font=\scriptsize, fill=fog8Green!15, inner sep=1pt},
+  al/.style={draw, align=center, font=\scriptsize, fill=monoRed!15, minimum height=0.7cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[io] (x) {Số đọc $x_t$};
+\node[proc, right=of x] (z) {Tính $z=\dfrac{x_t-\mu}{\sigma}$};
+\node[dec, right=of z] (chk) {$|z|>3$?};
+\node[al, right=of chk] (alert) {Tạo STORM-ALERT\\ $\to$ route Slack};
+\node[proc, below=1.0cm of chk] (upd) {Cập nhật $\mu,\sigma$ (EWMA)};
+\draw[arr] (x) -- (z);
+\draw[arr] (z) -- (chk);
+\draw[arr] (chk) -- node[above, font=\tiny]{Có} (alert);
+\draw[arr] (chk) -- node[right, font=\tiny]{Không} (upd);
+\draw[arr] (alert) |- (upd);
+\end{tikzpicture}
+\caption{Lưu đồ phát hiện bất thường EWMA z-score trong \code{Bolt\_ingest}.}
+\label{fig:imp-ewma}
+\end{figure}
+
+\textbf{Tác động.} Việc phát hiện diễn ra ngay tại biên với chi phí $O(1)$ bộ nhớ
+mỗi thiết bị, không phụ thuộc Cloud. Cảnh báo thực tế sinh ra từ cơ chế này được
+minh hoạ ở \Cref{fig:slack-alerts} (mục tiếp theo): mỗi cảnh báo ghi rõ giá trị
+đọc, baseline EWMA và độ lệch theo sigma, giúp người vận hành hiểu \textit{vì sao}
+một số đọc bị coi là bất thường.
+
+\subsection{Cải tiến 6 --- Định tuyến cảnh báo Slack theo từng nhà}
+
+\textbf{Vấn đề gốc.} Phát hiện được bất thường là chưa đủ; cảnh báo phải đến đúng
+người phụ trách đúng ngôi nhà, nếu không sẽ bị nhiễu loạn giữa hàng chục nhà.
+
+\textbf{Cơ chế Fog.} Mỗi ngôi nhà được cấu hình một webhook Slack riêng (lưu trong
+\code{.env.gateway}). Khi có cảnh báo, \code{Bolt\_ingest} tra cứu webhook theo
+\code{house\_id} và POST thẳng tới kênh tương ứng (\Cref{fig:imp-slack-route}).
+Toàn bộ chuỗi phát hiện $\to$ định tuyến $\to$ gửi diễn ra tại gateway nên độ trễ
+cảnh báo dưới một giây và \textit{không} phụ thuộc kết nối Cloud --- ngay cả khi
+Cloud offline, cảnh báo an toàn vẫn được gửi (miễn gateway còn truy cập Internet).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, font=\scriptsize, minimum height=0.7cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[box, fill=monoRed!15] (a) {Anomaly\\ house\_id=1};
+\node[box, fill=boxGray, right=1.0cm of a, text width=2.4cm] (m) {Bảng webhook\\ house\_id $\to$ URL};
+\node[box, fill=fog8Green!18, right=1.0cm of m] (c1) {\#house-1};
+\node[box, fill=fog8Green!8, above=0.25cm of c1] (c0) {\#house-0};
+\node[box, fill=fog8Green!8, below=0.25cm of c1] (c3) {\#house-3};
+\draw[arr] (a) -- (m);
+\draw[arr] (m) -- node[above, font=\tiny]{lookup} (c1);
+\end{tikzpicture}
+\caption{Định tuyến cảnh báo: tra webhook theo \code{house\_id} rồi gửi đúng kênh Slack.}
+\label{fig:imp-slack-route}
+\end{figure}
+
+\Cref{fig:slack-alerts} là ảnh chụp thực tế kênh \code{\#house-1} nhận các cảnh báo
+\code{STORM-ALERT} do gateway \code{gw-single} phát hiện bằng bộ \code{Z\_SCORE}.
+
+\begin{figure}[H]
+\centering
+\IfFileExists{images/fog/slack_alerts.png}
+  {\includegraphics[width=0.92\textwidth]{images/fog/slack_alerts.png}}
+  {\fbox{\parbox[c][5cm][c]{0.9\textwidth}{\centering\itshape [Đặt ảnh chụp Slack tại \texttt{images/fog/slack\_alerts.png}]}}}
+\caption{Cảnh báo bất thường thực tế trên Slack: mỗi cảnh báo ghi rõ giá trị đọc, baseline EWMA, độ lệch sigma và lý do (gateway gw-single, detector Z\_SCORE).}
+\label{fig:slack-alerts}
+\end{figure}
+
+\subsection{Cải tiến 7 --- TagAwareScheduler (gán executor theo nhãn)}
+
+\textbf{Vấn đề gốc.} Bộ lập lịch mặc định của Storm không bảo đảm một executor cụ
+thể được đặt trên một supervisor cụ thể; bolt tổng hợp và bolt ghi DB có thể bị
+phân tán ngẫu nhiên qua nhiều nút, làm tăng số chặng mạng và khiến mỗi lần triển
+khai cho ra một cách phân bổ khác nhau (khó tái lập thực nghiệm).
+
+\textbf{Cơ chế Fog.} Đồ án hiện thực hoá một \textbf{TagAwareScheduler} tuỳ biến:
+mỗi thành phần topology được gán nhãn (\code{tier=gateway} hoặc \code{tier=cloud}),
+và bộ lập lịch chỉ ánh xạ executor đến supervisor có nhãn tương ứng
+(\Cref{fig:imp-tag}). Nhờ đó \code{Bolt\_cloudMerge} luôn được ghim trên nút Cloud
+kề MySQL, còn \code{Bolt\_ingest} ở lại gateway.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, font=\scriptsize, minimum height=0.7cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[box, fill=fog8Green!18] (e1) {Executor\\ tier=gateway};
+\node[box, fill=accentBlue!14, below=0.5cm of e1] (e2) {Executor\\ tier=cloud};
+\node[box, fill=boxGray, right=1.4cm of e1, yshift=-0.55cm, text width=2.0cm] (sch) {TagAware\\ Scheduler};
+\node[box, fill=fog8Green!10, right=1.6cm of sch, yshift=0.55cm] (s1) {Supervisor\\ (gateway)};
+\node[box, fill=accentBlue!8, right=1.6cm of sch, yshift=-0.55cm] (s2) {Supervisor\\ (cloud)};
+\draw[arr] (e1) -- (sch);
+\draw[arr] (e2) -- (sch);
+\draw[arr] (sch) -- node[above, font=\tiny]{match tag} (s1);
+\draw[arr] (sch) -- node[below, font=\tiny]{match tag} (s2);
+\end{tikzpicture}
+\caption{TagAwareScheduler ánh xạ executor đến supervisor cùng nhãn (tier).}
+\label{fig:imp-tag}
+\end{figure}
+
+\textbf{Tác động.} Việc gán cố định giảm số chặng mạng giữa các tầng và làm cho
+phân bổ topology \textit{ổn định, lặp lại được} giữa các lần triển khai --- điều
+kiện cần để các phép đo ở \Cref{ch:ketqua-fog} có thể so sánh công bằng.
+
+\subsection{Cải tiến 8 --- Ghi idempotent với REPLACE INTO}
+
+\textbf{Vấn đề gốc.} Trong cơ chế Store-and-Forward, một lô có thể được gửi lại
+nhiều lần khi kết nối chập chờn (ví dụ publish bị timeout nhưng thực tế đã tới
+Cloud). Nếu Cloud dùng \code{INSERT}, mỗi lần gửi lại tạo thêm một dòng trùng và
+làm sai lệch số liệu tổng hợp.
+
+\textbf{Cơ chế Fog.} Cloud dùng \code{REPLACE INTO} với khoá chính phức hợp
+\code{(house\_id, household\_id, device\_id, slice\_gap, slice\_index)}: cùng một
+khoá sẽ \textit{ghi đè} thay vì chèn mới. Kết hợp với ngữ nghĩa \textit{cumulative}
+(gateway luôn gửi tổng tích luỹ chứ không phải số gia), thao tác ghi trở nên
+\textbf{idempotent} hoàn toàn. \Cref{fig:imp-idem} minh hoạ: dù lô ``total=100''
+được gửi hai lần, hàng trong DB vẫn là 100 chứ không cộng thành 200.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, font=\scriptsize, minimum height=0.7cm},
+  db/.style={draw, cylinder, shape border rotate=90, aspect=0.3, align=center, font=\scriptsize, fill=fog8Green!12, minimum height=0.9cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[box, fill=accentBlue!12] (g) {Gateway};
+\node[db, right=3.2cm of g] (d) {DB row\\ =100};
+\draw[arr] (g.north east) ++(0,0.1) -- node[above, font=\tiny]{gửi lần 1: total=100} ([yshift=0.5cm]d.west);
+\draw[arr] (g.south east) ++(0,-0.1) -- node[below, font=\tiny]{gửi lại: total=100 (REPLACE)} ([yshift=-0.5cm]d.west);
+\end{tikzpicture}
+\caption{Ghi idempotent: gửi lại cùng lô cumulative không làm sai số liệu (REPLACE giữ giá trị 100).}
+\label{fig:imp-idem}
+\end{figure}
+
+\textbf{Tác động.} Thực nghiệm xác nhận \textbf{0 dòng trùng} sau quá trình drain
+recovery, bảo đảm tính đúng đắn của dữ liệu ngay cả khi mạng không ổn định.
+
+\subsection{Cải tiến 9 --- Đơn giản hoá topology Cloud}
+
+\textbf{Vấn đề gốc.} Ở Monolithic, Cloud phải gánh toàn bộ pipeline: phân loại,
+nhân bản theo cửa sổ, tính trung bình, tổng hợp household và dự báo --- bốn tầng
+bolt với tám luồng cửa sổ, chính là nơi sinh ra nút thắt \code{Bolt\_split}.
+
+\textbf{Cơ chế Fog.} Vì gateway đã làm hết phần tổng hợp, topology Cloud được rút
+gọn còn \textbf{một bolt duy nhất} (\code{Bolt\_cloudMerge}) chỉ làm nhiệm vụ giải
+nén lô và \code{REPLACE INTO} DB. \Cref{fig:imp-cloudtopo} đối chiếu hai topology.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, font=\tiny, minimum height=0.6cm},
+  arr/.style={-{Stealth[length=1.8mm]}, semithick}
+]
+%% Mono
+\node[font=\bfseries\scriptsize] (mt) {(a) Cloud Monolithic};
+\node[box, fill=accentBlue!12, below=0.3cm of mt] (ms) {Spout};
+\node[box, fill=monoRed!22, right=0.5cm of ms] (msp) {split};
+\node[box, fill=boxGray, right=0.5cm of msp] (mavg) {avg};
+\node[box, fill=boxGray, right=0.4cm of mavg] (msum) {sum};
+\node[box, fill=boxGray, right=0.4cm of msum] (mfc) {forecast};
+\draw[arr] (ms)--(msp); \draw[arr] (msp)--(mavg); \draw[arr] (mavg)--(msum); \draw[arr] (msum)--(mfc);
+%% Fog
+\node[font=\bfseries\scriptsize, below=1.3cm of mt, anchor=west] (ft) {(b) Cloud Fog};
+\node[box, fill=accentBlue!12, below=0.3cm of ft] (fs) {Spout};
+\node[box, fill=fog8Green!20, right=0.5cm of fs, text width=1.8cm] (fm) {Bolt\_cloudMerge};
+\node[box, fill=fog8Green!10, right=0.6cm of fm] (fdb) {MySQL};
+\draw[arr] (fs)--(fm); \draw[arr] (fm)--node[above,font=\tiny]{REPLACE}(fdb);
+\end{tikzpicture}
+\caption{Topology Cloud: Monolithic bốn tầng bolt (a) so với Fog một bolt (b).}
+\label{fig:imp-cloudtopo}
+\end{figure}
+
+\textbf{Tác động.} Đây là lý do trực tiếp khiến cloud bolt capacity về \textbf{0\%}
+ở trạng thái ổn định tại h40 trong kịch bản 8 gateway: lượng công việc trên mỗi
+đơn vị thời gian ở Cloud giảm hàng chục lần. Mặt trái cần lưu ý là khi \textit{một}
+gateway gửi quá nhiều bản ghi trong một lô (cấu hình 1 gateway, 200 dòng/batch),
+chính \code{Bolt\_cloudMerge} lại trở thành nút thắt mới (318,9\% tại h40) --- vấn
+đề được phân tích ở \Cref{ch:sosanh}.
+
+\subsection{Cải tiến 10 --- Energy Optimizer daemon}
+
+\textbf{Vấn đề gốc.} Trong cấu hình nhiều gateway, ở các giai đoạn tải thấp nhiều
+gateway không có nhà nào active nhưng JVM của chúng vẫn tiêu tốn 2--5\% CPU mỗi cái
+một cách lãng phí.
+
+\textbf{Cơ chế Fog.} Một daemon Node.js (\code{energy\_optimizer.js}) giám sát
+traffic MQTT theo thời gian thực và tự động ``đóng băng'' gateway nhàn rỗi
+(\Cref{fig:imp-energy-loop}): cứ mỗi 3 giây, nếu một gateway không nhận bản tin nào
+quá 15 giây thì daemon gọi \code{docker pause}; khi traffic quay lại thì
+\code{docker unpause}. Máy trạng thái vòng đời gateway đã trình bày ở
+\Cref{fig:gw-life}. Điểm tinh tế là dùng \code{pause}/\code{unpause} (cgroups
+freezer) thay cho \code{stop}/\code{start}: nó đưa CPU về 0\% nhưng \textit{giữ
+nguyên} accumulator state trong RAM và unpause trong dưới 50 ms, tránh được độ trễ
+khởi động lại JVM ($\sim$10 s) lẫn mất state.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.65cm,
+  io/.style={draw, rounded corners, align=center, font=\scriptsize, fill=accentBlue!12, minimum height=0.7cm},
+  proc/.style={draw, align=center, font=\scriptsize, fill=boxGray, minimum height=0.7cm},
+  dec/.style={draw, diamond, aspect=2.4, align=center, font=\scriptsize, fill=fog8Green!15, inner sep=1pt},
+  act/.style={draw, align=center, font=\scriptsize, fill=fog1Orange!18, minimum height=0.7cm},
+  arr/.style={-{Stealth[length=2.2mm]}, thick}
+]
+\node[io] (sub) {Subscribe iot-data};
+\node[proc, below=of sub] (upd) {Cập nhật gwLastSeen[gw]};
+\node[dec, below=of upd] (idle) {idle \textgreater 15s?};
+\node[act, right=1.8cm of idle] (pause) {docker pause gw};
+\node[dec, below=1.0cm of idle] (traf) {traffic\\ quay lại?};
+\node[act, right=1.8cm of traf] (unp) {docker unpause gw};
+\draw[arr] (sub) -- (upd);
+\draw[arr] (upd) -- (idle);
+\draw[arr] (idle) -- node[above, font=\tiny]{Có} (pause);
+\draw[arr] (idle) -- node[right, font=\tiny]{Không} (traf);
+\draw[arr] (traf) -- node[above, font=\tiny]{Có (\textless 50ms)} (unp);
+\draw[arr] (traf.west) -- ++(-1.3,0) |- node[pos=0.25, left, font=\tiny]{lặp mỗi 3s} (sub.west);
+\end{tikzpicture}
+\caption{Vòng lặp giám sát của Energy Optimizer: pause gateway nhàn rỗi, unpause khi traffic quay lại.}
+\label{fig:imp-energy-loop}
+\end{figure}
+
+\textbf{Tác động.} CPU của gateway nhàn rỗi về \textbf{0\%} (từ 2--5\%). Cơ chế đặc
+biệt hiệu quả ở giai đoạn tải thấp --- ví dụ nấc h10 chỉ có 2/8 gateway active,
+sáu gateway còn lại được pause --- tiết kiệm 12--30\% CPU máy chủ
+(\Cref{fig:energy}). Vì chỉ có ý nghĩa khi tồn tại nhiều gateway, cải tiến này chỉ
+áp dụng cho cấu hình 8 gateway.
+
+\section{Sơ đồ triển khai phân tầng}
+
+\Cref{fig:deploy-tiers} trình bày sơ đồ triển khai năm tầng của hệ thống Fog.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  tier/.style={draw, rounded corners, align=center, font=\small, minimum width=11cm, minimum height=1.0cm},
+  arr/.style={-{Stealth[length=2.5mm]}, very thick}
+]
+\node[tier, fill=boxGray] (t1) {\textbf{Tầng 1 --- Sensors/Publishers:} 40 houses $\times$ simulator (MQTT raw 10 msg/s)};
+\node[tier, fill=fog1Orange!16, below=0.7cm of t1] (t2) {\textbf{Tầng 2 --- Fog Edge:} Raspberry Pi 3 (+ 7 container Docker nếu chế độ 8-GW)};
+\node[tier, fill=accentBlue!10, below=0.7cm of t2] (t3) {\textbf{Tầng 3 --- WAN:} MQTT GZIP batch (60s/flush)};
+\node[tier, fill=fog8Green!14, below=0.7cm of t3] (t4) {\textbf{Tầng 4 --- AWS EC2 (ap-southeast-1):} Nimbus + Supervisor + ZK + MySQL + Prometheus + Grafana};
+\node[tier, fill=boxGray, below=0.7cm of t4] (t5) {\textbf{Tầng 5 --- Web Dashboard} (port 9000)};
+\draw[arr] (t1) -- (t2);
+\draw[arr] (t2) -- (t3);
+\draw[arr] (t3) -- (t4);
+\draw[arr] (t4) -- (t5);
+\end{tikzpicture}
+\caption{Sơ đồ triển khai phân tầng của hệ thống Fog Computing.}
+\label{fig:deploy-tiers}
+\end{figure}
+
+\section{Cấu hình phần cứng và phần mềm}
+
+\Cref{tab:config} so sánh môi trường triển khai của ba hệ thống.
+
+\begin{table}[H]
+\centering
+\caption{Cấu hình phần cứng và phần mềm ba hệ thống}
+\label{tab:config}
+\small
+\begin{tabular}{p{0.22\textwidth} p{0.24\textwidth} p{0.24\textwidth} p{0.16\textwidth}}
+\toprule
+\textbf{Thành phần} & \textbf{Monolithic} & \textbf{Fog (8 GW)} & \textbf{Fog (1 GW)} \\
+\midrule
+Cloud instance & EC2 t3.large (2vCPU, 8GB) & EC2 t3.small (2vCPU, 2GB) & EC2 t3.small \\
+Edge hardware  & ---                       & 7$\times$ Docker + 1$\times$ Pi 3 & 1$\times$ Pi 3 \\
+Apache Storm   & 2.1.0 (distributed)       & LocalCluster             & LocalCluster \\
+MySQL          & 8.4.2                     & 8.4.2                    & 8.4.2 \\
+MQTT Broker    & mosquitto                 & mosquitto                & mosquitto \\
+Prometheus     & 2.54.1                    & 2.54.1                   & 2.54.1 \\
+Grafana        & 11.1.5                    & 11.1.5                   & 11.1.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%% ############################################################################
+\chapter{PHƯƠNG PHÁP THỰC NGHIỆM}
+\label{ch:phuongphap}
+%% ############################################################################
+
+\section{Tổng quan sáu kịch bản đo}
+
+Đồ án thực hiện sáu kịch bản đo, tóm tắt trong \Cref{tab:scenarios}.
+
+\begin{table}[H]
+\centering
+\caption{Tổng quan sáu kịch bản thực nghiệm}
+\label{tab:scenarios}
+\small
+\begin{tabular}{p{0.18\textwidth} c p{0.18\textwidth} p{0.20\textwidth} c}
+\toprule
+\textbf{Kịch bản} & \textbf{Ký hiệu} & \textbf{Hệ thống} & \textbf{Mục tiêu} & \textbf{Ngày đo} \\
+\midrule
+Ramp Monolithic   & MONO-KB1  & Monolithic            & Điểm bão hoà        & 2026-06-18 \\
+Steady Monolithic & MONO-KB2  & Monolithic            & Headline metrics    & 2026-06-18 \\
+Ramp Fog 8 GW     & FOG-KB1-A & Fog 8 GW (7 Docker+Pi)& Scalability phân tán& 2026-06-28 \\
+Ramp Fog 1 GW     & FOG-KB1-B & Fog 1 GW (1 Pi 3)     & Scalability đơn     & 2026-06-28 \\
+Recovery Fog 8 GW & FOG-KB2-A & Fog 8 GW              & Store-and-Forward   & 2026-06-28 \\
+Recovery Fog 1 GW & FOG-KB2-B & Fog 1 GW              & Store-and-Forward   & 2026-06-28 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Dataset và Publisher}
+
+Dữ liệu mô phỏng theo phong cách dataset REFIT (40 ngôi nhà, mỗi thiết bị đo công
+suất với chu kỳ khoảng 8 giây). Publisher viết bằng Node.js, phát bản tin MQTT
+với trường \code{event\_ts = Date.now()}, tốc độ \code{SPEED=10} msg/s mỗi nhà,
+trên topic \code{iot-data}, QoS = 0.
+
+\textbf{Kịch bản ramp} (scalability) tăng tải theo 5 nấc, mỗi nấc 360 giây:
+\code{h01 $\to$ h05 $\to$ h10 $\to$ h20 $\to$ h40} (tương ứng 10, 50, 100, 200,
+400 msg/s). \textbf{Kịch bản steady} giữ tải cố định 40 nhà trong 1.800 giây.
+
+\section{Metrics thu thập và công cụ}
+
+\Cref{tab:metric-tool} liệt kê các metric, nguồn, script và tần suất thu thập.
+
+\begin{table}[H]
+\centering
+\caption{Metrics, nguồn và công cụ thu thập}
+\label{tab:metric-tool}
+\small
+\begin{tabular}{p{0.26\textwidth} p{0.24\textwidth} p{0.22\textwidth} p{0.14\textwidth}}
+\toprule
+\textbf{Metric} & \textbf{Nguồn} & \textbf{Script} & \textbf{Tần suất} \\
+\midrule
+Storm Complete Latency & Prometheus StormExporter & \code{observe\_ramp*.sh} & Cuối mỗi nấc \\
+Bolt Capacity          & Prometheus               & \code{observe\_ramp*.sh} & Cuối mỗi nấc \\
+Gateway Exec Latency   & Prometheus (fog\_gateway\_*) & \code{observe\_ramp*.sh} & Cuối mỗi nấc \\
+WAN KB/min             & Prometheus (flush\_total, publish\_size) & \code{observe\_ramp*.sh} & Cuối mỗi nấc \\
+CPU/RAM                & Docker stats $\to$ python & \code{observe\_ramp*.sh} & Mỗi 12s \\
+End-to-end Latency     & MySQL SSH query           & \code{latency\_report.sh} & Sau mỗi kịch bản \\
+Queue Depth            & Prometheus (store\_queue\_size) & \code{kb2\_offline\_recovery.sh} & Mỗi 5s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Truy vấn Prometheus và SQL}
+
+Các metric Storm và gateway được lấy trực tiếp từ Prometheus bằng PromQL. Ví dụ,
+cloud bolt capacity được truy vấn theo nhãn topology và component, còn gateway
+execute latency được tính bằng tỷ số giữa tổng thời gian và số lần gọi trong cửa
+sổ một phút:
+
+\begin{lstlisting}[caption={Hai truy vấn PromQL tiêu biểu}]
+# Cloud bolt capacity (gia tri thap phan, 1.0 = 100%)
+storm_bolt_capacity{topology="fog-cloud", component="Bolt_cloudMerge"}
+
+# Gateway execute latency trung binh trong 1 phut (ms)
+rate(fog_gateway_execute_latency_sum[1m])
+  / rate(fog_gateway_execute_latency_count[1m])
+\end{lstlisting}
+
+End-to-end latency được đo bằng truy vấn SQL trực tiếp trên MySQL qua SSH, lấy
+hiệu giữa thời điểm ghi DB (\code{updatedAt}) và thời điểm sự kiện gốc
+(\code{event\_ts}), sau đó tính các phân vị p50/p95/p99:
+
+\begin{lstlisting}[language=SQL,caption={Truy vấn SQL đo end-to-end latency}]
+SELECT
+  TIMESTAMPDIFF(SECOND, FROM_UNIXTIME(event_ts/1000), updatedAt) AS lat_s
+FROM fog_device_data
+WHERE updatedAt >= NOW() - INTERVAL 30 MINUTE
+ORDER BY lat_s;
+-- p50/p95/p99 duoc tinh tu phan phoi lat_s o tang script
+\end{lstlisting}
+
+Như đã lưu ý, do \code{updatedAt} luôn bằng \code{NOW()} của lần ghi cuối nên giá
+trị \code{lat\_s} là artifact đo lường (xem \Cref{ch:sosanh} và
+Phụ lục~\ref{app:artifact}).
+
+\section{Script tự động hoá}
+
+Ba script chính điều khiển toàn bộ quá trình đo:
+\begin{itemize}
+  \item \code{tools/observe\_ramp.sh} --- chạy ramp scalability cho Fog, tự động
+        tăng tải và chụp snapshot metric cuối mỗi nấc.
+  \item \code{tools/kb2\_offline\_recovery.sh} --- test offline recovery: warmup
+        15 phút $\to$ tắt cloud-mqtt 5 phút $\to$ bật lại $\to$ đo recovery time.
+  \item \code{tools/observe\_ramp\_mono.sh} --- chạy ramp scalability cho
+        Monolithic.
+\end{itemize}
+
+\section{Hạn chế và biện pháp kiểm soát}
+
+Để bảo đảm tính tin cậy, mỗi kịch bản được chạy lại nếu xuất hiện outlier, và
+Docker được reset giữa các kịch bản để loại bỏ trạng thái tồn dư.
+
+\textbf{Hạn chế đo lường End-to-End Latency:} do \code{REPLACE INTO} dùng
+\code{NOW()} nên cột \code{updatedAt} luôn bằng thời điểm ghi \textit{cuối cùng},
+không phải lần ghi đầu tiên. Vì vậy các giá trị End-to-End latency cao (401--655 s)
+là \textbf{artifact thiết kế}, không phải độ trễ thực. Độ trễ ghi lần đầu thực tế
+xấp xỉ 60--65 giây (chu kỳ flush + thời gian xử lý Cloud). Vấn đề này được phân
+tích sâu trong \Cref{ch:sosanh} và Phụ lục~\ref{app:artifact}.
+
+%% ############################################################################
+\chapter{KẾT QUẢ HỆ THỐNG MONOLITHIC}
+\label{ch:ketqua-mono}
+%% ############################################################################
+
+\section{MONO-KB1 --- Ramp Scalability}
+
+\Cref{tab:mono-kb1} trình bày số liệu ramp của hệ thống Monolithic.
+
+\begin{table}[H]
+\centering
+\caption{Số liệu MONO-KB1 (ramp scalability)}
+\label{tab:mono-kb1}
+\small
+\begin{tabular}{c c c c c c c}
+\toprule
+\textbf{Số nhà} & \textbf{Msg/s} & \textbf{Complete Lat.} & \textbf{Bolt Split Cap.} & \textbf{Acked/600s} & \textbf{Emitted/600s} & \textbf{Ack Ratio} \\
+\midrule
+1  & 10  & 55 ms              & 45,5\%            & 2.840  & 82.460    & 3,4\% \\
+5  & 50  & 97 ms              & 11,2\%            & 13.973 & 438.034   & 3,2\% \\
+10 & 100 & 290 ms             & 3,9\%             & 30.326 & 1.057.009 & 2,9\% \\
+20 & 200 & \textbf{1.111 ms}  & \textbf{89,8\%}   & 22.422 & 1.493.779 & 1,5\% \\
+40 & 400 & \textbf{5.282 ms}  & \textbf{169\%}    & 6.873  & 1.547.121 & 0,4\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Cref{fig:mono-cl} cho thấy complete latency tăng theo cấp số nhân khi số nhà
+tăng, vượt ngưỡng degradation 1.000 ms ngay tại 20 nhà.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6.5cm,
+  ybar, bar width=16pt,
+  ymode=log, log basis y=10,
+  ymin=10, ymax=10000,
+  symbolic x coords={1,5,10,20,40},
+  xtick=data,
+  xlabel={Số nhà}, ylabel={Complete Latency (ms, log)},
+  nodes near coords, point meta=explicit symbolic,
+  nodes near coords align={vertical}, every node near coord/.append style={font=\scriptsize},
+  enlarge x limits=0.15,
+]
+\addplot[fill=accentBlue!70] coordinates {(1,55)[55] (5,97)[97] (10,290)[290] (20,1111)[1.111] (40,5282)[5.282]};
+\draw[dashed, monoRed, very thick] (axis cs:1,1000) -- (axis cs:40,1000)
+  node[pos=0.5, above, font=\scriptsize, monoRed]{Ngưỡng degradation 1000 ms};
+\end{axis}
+\end{tikzpicture}
+\caption{MONO-KB1: Storm Complete Latency theo số nhà (thang log).}
+\label{fig:mono-cl}
+\end{figure}
+
+\Cref{fig:mono-cap} kết hợp Bolt Split Capacity (cột) và Ack Ratio (đường), làm
+rõ điểm bão hoà tại 20 nhà.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6.5cm,
+  axis y line*=left,
+  ybar, bar width=16pt,
+  symbolic x coords={1,5,10,20,40}, xtick=data,
+  xlabel={Số nhà}, ylabel={Bolt Split Capacity (\%)},
+  ymin=0, ymax=180, enlarge x limits=0.15,
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+]
+\addplot[fill=monoRed!70] coordinates {(1,45.5) (5,11.2) (10,3.9) (20,89.8) (40,169)};
+\addlegendentry{Bolt Split Capacity}
+\draw[dashed, black] (axis cs:1,100) -- (axis cs:40,100);
+\end{axis}
+\begin{axis}[
+  width=0.82\textwidth, height=6.5cm,
+  axis y line*=right, axis x line=none,
+  symbolic x coords={1,5,10,20,40},
+  ylabel={Ack Ratio (\%)}, ymin=0, ymax=4,
+  legend style={at={(0.02,0.86)}, anchor=north west, font=\scriptsize},
+]
+\addplot[fog1Orange, very thick, mark=*] coordinates {(1,3.4) (5,3.2) (10,2.9) (20,1.5) (40,0.4)};
+\addlegendentry{Ack Ratio}
+\end{axis}
+\end{tikzpicture}
+\caption{MONO-KB1: Bolt Split Capacity (cột) và Ack Ratio (đường). Điểm bão hoà tại 20 nhà.}
+\label{fig:mono-cap}
+\end{figure}
+
+\Cref{fig:mono-grafana-kb1} là ảnh chụp Grafana xác nhận các xu hướng trên.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/mono/s1_ramp_bolt_capacity.png}
+  \caption{Bolt capacity}
+\end{subfigure}\hfill
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/mono/s1_ramp_complete_latency.png}
+  \caption{Complete latency}
+\end{subfigure}
+\caption{MONO-KB1 (Grafana): bolt capacity và complete latency theo ramp.}
+\label{fig:mono-grafana-kb1}
+\end{figure}
+
+\section{Phân tích bottleneck Monolithic}
+
+Tại nấc h40, \code{Bolt\_split} nhận toàn bộ 400 msg/s và phải phân loại vào tám
+cửa sổ thời gian cho nhiều thiết bị. Với capacity 169\%, throughput thực chỉ đạt
+khoảng $400 \times 1/1{,}69 \approx 237$ msg/s, dẫn tới tích luỹ
+$400 - 237 = 163$ msg/s trong hàng đợi. Sau 360 giây của nấc h40, ước tính có
+khoảng $163 \times 360 \approx 58.680$ bản tin chờ xử lý trong queue, gây timeout
+và drop. \Cref{fig:mono-bottleneck} minh hoạ dòng nghẽn này.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=1.2cm,
+  bo/.style={draw, rounded corners, align=center, font=\scriptsize, minimum height=0.9cm},
+  arr/.style={-{Stealth[length=2.5mm]}, thick}
+]
+\node[bo, fill=accentBlue!12] (sp) {Spout\\ 400/s};
+\node[bo, fill=monoRed!25, right=of sp] (split) {Bolt\_split\\ 169\% cap.};
+\node[bo, fill=fog1Orange!20, right=of split] (q) {Queue\\ overflow};
+\node[bo, fill=boxGray, right=of q] (avg) {Bolt\_avg\\ 8,9\%};
+\node[bo, fill=monoRed!15, right=of avg] (drop) {timeout /\\ drop};
+\draw[arr] (sp) -- (split);
+\draw[arr] (split) -- node[above, font=\scriptsize]{237/s} (q);
+\draw[arr] (q) -- (avg);
+\draw[arr] (avg) -- (drop);
+\end{tikzpicture}
+\caption{Dòng nghẽn Monolithic tại h40: Bolt\_split 169\% capacity gây tràn hàng đợi.}
+\label{fig:mono-bottleneck}
+\end{figure}
+
+\section{MONO-KB2 --- Steady State 40 Nhà}
+
+\Cref{tab:mono-kb2} trình bày số liệu steady-state trong 30 phút.
+
+\begin{table}[H]
+\centering
+\caption{Số liệu MONO-KB2 (steady 30 phút)}
+\label{tab:mono-kb2}
+\small
+\begin{tabular}{p{0.42\textwidth} c p{0.30\textwidth}}
+\toprule
+\textbf{Metric} & \textbf{Giá trị} & \textbf{Ghi chú} \\
+\midrule
+Complete Latency (mean Grafana) & 1,13 s & Bao gồm drain phase \\
+Complete Latency (giai đoạn ổn định) & 2,75 s & Giai đoạn ổn định \\
+Complete Latency (max) & 5,09 s & Cuối session khi publisher dừng \\
+Split Bolt Capacity (max) & \textbf{99--189\%} & Bottleneck rõ ràng \\
+Forecast-1 Execute Latency (max) & 47,8 ms & Bolt nặng nhất ngoài split \\
+Spout Emitted Rate (max) & 296 ops/s & Bị throttle từ 400 input \\
+DB Rows Written & 26.965 & Trong 30 phút \\
+End-to-End Latency p50 & 655 s & Measurement artifact \\
+End-to-End Latency p95 & 1.258 s & Measurement artifact \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Phân tích.} Số liệu Bảng~\ref{tab:mono-kb2} khẳng định và mở rộng kết luận
+về điểm bão hoà từ \Cref{tab:mono-kb1}. Ba giá trị complete latency cho thấy bản
+chất của tình trạng quá tải: giá trị trung bình do Grafana báo (1,13 s) bị
+\textit{kéo xuống} bởi giai đoạn drain cuối phiên, trong khi giá trị ở giai đoạn ổn
+định thực sự (2,75 s) và đỉnh (5,09 s) mới phản ánh đúng độ trễ mà người dùng cảm
+nhận khi hệ thống chịu tải 400 msg/s liên tục. Mấu chốt nằm ở dòng
+\code{Split Bolt Capacity} đạt \textbf{189\%}: bolt phân loại phải làm việc gần gấp
+đôi khả năng bền vững, nên backpressure kéo \code{Spout Emitted Rate} xuống chỉ còn
+\textbf{296 ops/s} dù đầu vào là 400 msg/s --- tức khoảng một phần tư lượng dữ liệu
+bị dồn ứ hoặc trễ. Hai dòng End-to-End Latency (p50 = 655 s, p95 = 1.258 s) tuy
+lớn nhưng là \textit{artifact đo lường} của ngữ nghĩa \code{REPLACE INTO}
+(\Cref{ch:sosanh}), không nên diễn giải là độ trễ thực. Tổng hợp lại, ở quy mô 40
+nhà kiến trúc Monolithic không còn hoạt động ở chế độ ổn định mà liên tục ở trạng
+thái quá tải có kiểm soát bằng backpressure --- đây chính là động lực cho kiến trúc
+Fog.
+
+Trên biểu đồ topology throughput của Grafana
+(\Cref{fig:mono-grafana-kb2}), hệ thống thể hiện hình \textit{bell curve}: thông
+lượng tăng dần trong giai đoạn nạp tải, đạt đỉnh, rồi giảm dần trong giai đoạn
+\textit{drain} sau khi publisher dừng --- khi Storm tiếp tục xử lý lượng tuple
+còn tồn trong hàng đợi nội bộ. Hình dạng này là bằng chứng trực quan cho hiện
+tượng dồn ứ: nếu hệ thống xử lý kịp thời gian thực, throughput sẽ phẳng theo tải
+đầu vào chứ không kéo dài thành đuôi drain sau khi publisher đã dừng.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/mono/s2_steady_bolt_capacity.png}
+  \caption{Bolt capacity steady}
+\end{subfigure}\hfill
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/mono/s2_steady_topology_throughput.png}
+  \caption{Topology throughput (bell curve)}
+\end{subfigure}
+\caption{MONO-KB2 (Grafana): bolt capacity và topology throughput ở trạng thái ổn định.}
+\label{fig:mono-grafana-kb2}
+\end{figure}
+
+\section{Tóm tắt điểm mạnh/yếu Monolithic}
+
+\begin{table}[H]
+\centering
+\caption{Điểm mạnh và hạn chế của kiến trúc Monolithic}
+\label{tab:mono-procon}
+\small
+\begin{tabular}{p{0.46\textwidth} p{0.46\textwidth}}
+\toprule
+\textbf{Ưu điểm} & \textbf{Hạn chế} \\
+\midrule
+Kiến trúc đơn giản nhất, dễ triển khai & Bão hoà sớm tại $\sim$20 nhà (200 msg/s) \\
+Không cần phần cứng biên & Bolt\_split overload 169\% tại 400 msg/s \\
+Tập trung quản lý, dễ giám sát & Complete latency 5,28 s tại h40 \\
+Phù hợp quy mô nhỏ ($\le$10 nhà) & Cloud offline $\to$ 100\% mất dữ liệu \\
+                                 & Tốn băng thông WAN (raw streaming) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Nhận định.} \Cref{tab:mono-procon} cho thấy kiến trúc Monolithic không phải
+là lựa chọn tồi một cách tuyệt đối: với quy mô nhỏ (dưới 10 nhà), sự đơn giản,
+không cần phần cứng biên và dễ giám sát của nó là những ưu điểm thực sự đáng giá.
+Vấn đề chỉ xuất hiện khi quy mô tăng: cả ba hạn chế cốt lõi --- bão hoà sớm, mất
+dữ liệu khi Cloud offline, và tốn băng thông WAN --- đều là hệ quả trực tiếp của
+việc \textit{tập trung toàn bộ xử lý ở một điểm và đẩy mọi bản tin thô lên đó}.
+Đây chính xác là ba điểm mà kiến trúc Fog nhắm tới giải quyết, và các chương tiếp
+theo sẽ định lượng mức độ cải thiện trên từng phương diện.
+
+%% ############################################################################
+\chapter{KẾT QUẢ HỆ THỐNG FOG COMPUTING}
+\label{ch:ketqua-fog}
+%% ############################################################################
+
+\section{FOG-KB1-A --- Ramp Scalability 8 Gateway}
+
+Môi trường gồm 7 container Docker và 1 Raspberry Pi 3, mỗi gateway phụ trách 5 nhà
+theo thứ tự kích hoạt gw-01 $\to$ gw-08. \Cref{tab:fog-kb1a} trình bày số liệu.
+
+\begin{table}[H]
+\centering
+\caption{Số liệu FOG-KB1-A (8 gateway)}
+\label{tab:fog-kb1a}
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{c c c c c c c c c c}
+\toprule
+\textbf{Nhà} & \textbf{Msg/s} & \textbf{Cloud Cap.} & \textbf{Cloud C.Lat.} & \textbf{GW Exec} & \textbf{GW Flush} & \textbf{CPU/GW} & \textbf{RAM/GW} & \textbf{WAN} & \textbf{Tuples} \\
+\midrule
+1  & 10  & 0\%            & N/A       & 0,032 ms & 93,8 ms  & 11,8\% & 182 MB & 15,0  & 2.527 \\
+5  & 50  & 0\%            & 4,5 ms    & 0,073 ms & 100,3 ms & 16,4\% & 191 MB & 40,2  & 14.659 \\
+10 & 100 & \textbf{91,2\%}& 14.520 ms & 0,068 ms & 540,2 ms & 11,4\% & 194 MB & 88,9  & 38.480 \\
+20 & 200 & 4,6\%          & 34.974 ms & 0,067 ms & 307,6 ms & 13,1\% & 229 MB & 159,4 & 85.884 \\
+40 & 400 & \textbf{0\%}   & 84.499 ms & 0,044 ms & 614,4 ms & 10,6\% & 239 MB & 332,8 & 173.249 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Phân tích.} Bảng~\ref{tab:fog-kb1a} cho thấy đặc tính nổi bật nhất của
+kiến trúc Fog 8 gateway: khi tải tăng gấp 40 lần (từ 10 lên 400 msg/s), tải tính
+toán ở \textit{biên} gần như không đổi --- GW Execute Latency luôn dưới
+\textbf{0,1 ms}, CPU mỗi gateway dao động quanh 10--16\% và RAM chỉ tăng nhẹ từ
+182 lên 239 MB. Điều này khẳng định cơ chế tích luỹ gia tăng (Cải tiến~1) đã
+chuyển độ phức tạp xử lý từ ``theo từng bản tin'' sang ``theo từng lần flush'',
+khiến chi phí trên mỗi bản tin gần như bằng không. Ở phía Cloud, điểm đáng chú ý
+là Cloud Capacity \textit{không} tăng đơn điệu theo tải mà đạt đỉnh 91,2\% tại h10
+rồi \textbf{giảm về 0\% tại h40} --- một hành vi phản trực giác sẽ được giải thích
+ngay dưới đây. Cột WAN tăng tuyến tính nhưng rất chậm (15 $\to$ 332,8 KB/min),
+thấp hơn một bậc độ lớn so với raw streaming của Monolithic. Tóm lại, ở mức tải
+cao nhất, nút thắt cổ chai đã được dời khỏi cả biên lẫn Cloud.
+
+\textbf{Lưu ý:} Cloud Complete Latency cao (14--84 s) là artifact của ngữ nghĩa
+cumulative trong \code{REPLACE INTO} --- \code{updatedAt} luôn bằng lần ghi cuối,
+nên đo từ sensor đến lần ghi cuối. Độ trễ thực của lần ghi đầu tiên xấp xỉ 60 s
+(chu kỳ flush).
+
+\Cref{fig:fog-kb1a-cap} thể hiện cloud bolt capacity: spike 91,2\% tại h10 do JVM
+cold-start, tự phục hồi về 0\% tại h40.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6.2cm,
+  ybar, bar width=18pt,
+  symbolic x coords={1,5,10,20,40}, xtick=data,
+  xlabel={Số nhà}, ylabel={Cloud Bolt Capacity (\%)},
+  ymin=0, ymax=100, enlarge x limits=0.15,
+  nodes near coords, point meta=explicit symbolic,
+  every node near coord/.append style={font=\scriptsize},
+]
+\addplot[fill=fog8Green!70]
+  coordinates {(1,0) [0\%] (5,0) [0\%] (10,91.2) [91,2\%] (20,4.6) [4,6\%] (40,0) [0\%]};
+\draw[-{Stealth}, monoRed, thick] (axis cs:20,70) -- (axis cs:10,88)
+  node[pos=0, right, font=\scriptsize, text width=3.2cm]{JVM cold-start spike, tự phục hồi về 0\% tại h40};
+\end{axis}
+\end{tikzpicture}
+\caption{FOG-KB1-A: Cloud Bolt Capacity (8 gateway).}
+\label{fig:fog-kb1a-cap}
+\end{figure}
+
+\Cref{fig:fog-kb1a-exec} cho thấy gateway execute latency phẳng dưới 0,1 ms xuyên
+suốt mọi mức tải --- minh chứng cho tích luỹ gia tăng siêu nhẹ tại biên.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=5.8cm,
+  symbolic x coords={1,5,10,20,40}, xtick=data,
+  xlabel={Số nhà}, ylabel={GW Execute Latency (ms)},
+  ymin=0, ymax=0.1,
+  nodes near coords, every node near coord/.append style={font=\scriptsize},
+]
+\addplot[fog8Green, very thick, mark=*] coordinates {(1,0.032) (5,0.073) (10,0.068) (20,0.067) (40,0.044)};
+\end{axis}
+\end{tikzpicture}
+\caption{FOG-KB1-A: Gateway Bolt Execute Latency --- sub-millisecond toàn bộ tải.}
+\label{fig:fog-kb1a-exec}
+\end{figure}
+
+\textbf{Staircase activation:} các gateway được kích hoạt tuần tự theo ramp:
+gw-01 (h01) $\to$ gw-02 (h10) $\to$ \dots\ $\to$ gw-08 (h40). \textbf{Anomaly JVM
+cold-start tại h10:} khi hai gateway flush gần đồng thời cùng kết nối JDBC còn
+``lạnh'', cloud bolt spike lên 91,2\% capacity, rồi tự phục hồi nhờ JIT
+compilation làm nóng đường xử lý. \Cref{fig:fog-kb1a-grafana} là ảnh Grafana
+tương ứng.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/fog/kb1a/cloud_bolt_capacity_600s.png}
+  \caption{Cloud bolt capacity}
+\end{subfigure}\hfill
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/fog/kb1a/all_gateways_bolt_capacity.png}
+  \caption{Capacity của 8 gateway}
+\end{subfigure}
+\caption{FOG-KB1-A (Grafana): cloud bolt capacity và capacity của 8 gateway.}
+\label{fig:fog-kb1a-grafana}
+\end{figure}
+
+\section{FOG-KB1-B --- Ramp Scalability 1 Gateway (Raspberry Pi 3)}
+
+Môi trường: một Raspberry Pi 3 phụ trách toàn bộ 40 nhà. \Cref{tab:fog-kb1b}
+trình bày số liệu.
+
+\begin{table}[H]
+\centering
+\caption{Số liệu FOG-KB1-B (1 gateway)}
+\label{tab:fog-kb1b}
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{c c c c c c c c c c}
+\toprule
+\textbf{Nhà} & \textbf{Msg/s} & \textbf{Cloud Cap.} & \textbf{Cloud C.Lat.} & \textbf{GW Cap.} & \textbf{GW Exec} & \textbf{GW Flush} & \textbf{CPU} & \textbf{RAM} & \textbf{WAN} \\
+\midrule
+1  & 10  & \textbf{35,3\%}  & 3,5 ms    & 0,04\% & 0,045 ms & 927,5 ms  & 10,9\% & 186 MB & 14,0 \\
+5  & 50  & \textbf{21,2\%}  & 3,5 ms    & 0,14\% & 0,023 ms & 661,2 ms  & 10,2\% & 194 MB & 41,8 \\
+10 & 100 & $\sim$0\%        & 8.729 ms  & 0,19\% & 0,049 ms & 967,9 ms  & 13,1\% & 211 MB & 88,8 \\
+20 & 200 & $\sim$0\%        & 46.123 ms & 0,80\% & 0,048 ms & 1.061 ms  & 14,9\% & 250 MB & 164,5 \\
+40 & 400 & \textbf{318,9\%} & 93.387 ms & 0,95\% & 0,030 ms & 759,2 ms  & 11,2\% & 288 MB & 396,1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Tại h40, một gateway gửi $40 \text{ nhà} \times 5 \text{ windows} = 200$
+records mỗi batch vào \code{Bolt\_cloudMerge}; thực thi \code{REPLACE INTO} 200
+dòng mất khoảng 47,8 s $\to$ \textbf{318,9\%} capacity. Điểm nghẽn nằm ở Cloud,
+không phải biên (GW capacity \textless 1\%). Cột $\sim$0\% tại h10, h20 phản ánh
+thời điểm Prometheus lấy mẫu rơi vào giữa hai burst; Grafana xác nhận spike xuất
+hiện đột ngột tại h40 chứ không tăng đều.
+
+\Cref{fig:fog-kb1b-grafana} là ảnh Grafana KB1-B.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/fog/kb1b/cloud_bolt_capacity_600s.png}
+  \caption{Cloud bolt capacity (spike 318,9\% tại h40)}
+\end{subfigure}\hfill
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/fog/kb1b/summary_stat_panels.png}
+  \caption{Summary stat panels}
+\end{subfigure}
+\caption{FOG-KB1-B (Grafana): cloud bolt capacity và bảng tổng hợp.}
+\label{fig:fog-kb1b-grafana}
+\end{figure}
+
+\Cref{fig:kb1a-vs-kb1b} so sánh trực tiếp cloud bolt capacity giữa 8 GW và 1 GW.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.85\textwidth, height=6.5cm,
+  ybar, bar width=12pt,
+  symbolic x coords={1,5,10,20,40}, xtick=data,
+  xlabel={Số nhà}, ylabel={Cloud Bolt Capacity (\%)},
+  ymin=0, ymax=340, enlarge x limits=0.15,
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+]
+\addplot[fill=fog8Green!70] coordinates {(1,0) (5,0) (10,91.2) (20,4.6) (40,0)};
+\addplot[fill=fog1Orange!80] coordinates {(1,35.3) (5,21.2) (10,0) (20,0) (40,318.9)};
+\legend{Fog 8 GW, Fog 1 GW}
+\draw[dashed, black] (axis cs:1,100) -- (axis cs:40,100)
+  node[pos=0.5, above, font=\scriptsize]{Ngưỡng overload 100\%};
+\end{axis}
+\end{tikzpicture}
+\caption{So sánh Cloud Bolt Capacity: 8 GW tự phục hồi về 0\% tại h40, 1 GW overload 318,9\%.}
+\label{fig:kb1a-vs-kb1b}
+\end{figure}
+
+\Cref{fig:res-h40} so sánh tài nguyên tại h40 (lấy 8 GW làm mốc 100\%).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6.2cm,
+  ybar, bar width=16pt,
+  symbolic x coords={RAM tổng, CPU tổng, WAN}, xtick=data,
+  ylabel={Giá trị tương đối so với 8 GW (\%)},
+  ymin=0, ymax=130, enlarge x limits=0.25,
+  legend style={at={(0.98,0.98)}, anchor=north east, font=\scriptsize},
+  nodes near coords, every node near coord/.append style={font=\tiny},
+]
+\addplot[fill=fog8Green!70] coordinates {(RAM tổng,100) (CPU tổng,100) (WAN,100)};
+\addplot[fill=fog1Orange!80] coordinates {(RAM tổng,15.1) (CPU tổng,12.2) (WAN,119)};
+\legend{Fog 8 GW, Fog 1 GW}
+\end{axis}
+\end{tikzpicture}
+\caption{FOG KB1-A vs KB1-B: so sánh tài nguyên tại h40. RAM 1 GW tiết kiệm 84,9\%, CPU tiết kiệm 87,8\%, nhưng WAN cao hơn 19\%.}
+\label{fig:res-h40}
+\end{figure}
+
+\section{FOG-KB2-A --- Cloud Offline Recovery: 8 Gateway}
+
+Môi trường: 8 GW, tải cố định 40 nhà. Timeline: warmup 15 phút $\to$ outage 5
+phút $\to$ drain $\to$ post-recovery 5 phút. \Cref{tab:fog-kb2a} trình bày kết quả.
+
+\begin{table}[H]
+\centering
+\caption{Số liệu FOG-KB2-A (offline recovery, 8 gateway)}
+\label{tab:fog-kb2a}
+\small
+\begin{tabular}{p{0.45\textwidth} c}
+\toprule
+\textbf{Chỉ số} & \textbf{Giá trị} \\
+\midrule
+Thời gian outage & 300 s (5 phút) \\
+Max Queue Depth  & \textbf{200 batch} ($= 8 \times 5 \times 5$) \\
+Recovery Time    & \textbf{96 s} \\
+Data Loss        & \textbf{0,0\%} \\
+Drain Rate       & 2,08 batch/s \\
+Tuples xử lý (30 phút) & 182.223 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Timeline chi tiết: trong outage, queue tăng theo bậc thang
+$0 \to 40 \to 80 \to 120 \to 160 \to 200$ batch; sau khi Cloud online,
+\code{drainQueue()} xả 200 batch về 0 trong 96 s (2,08 batch/s).
+\Cref{fig:kb2-timeline} minh hoạ.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.9\textwidth, height=6cm,
+  xlabel={Thời gian (phút)}, ylabel={Queue Depth (batch)},
+  ymin=0, ymax=220, xmin=0, xmax=27,
+  xtick={0,15,20,21.6,26.6}, xticklabels={0,15,20,21:36,26:36},
+  ytick={0,40,80,120,160,200},
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+]
+\addplot[fog8Green, very thick, mark=*] coordinates {
+  (0,0) (15,0) (16,40) (17,80) (18,120) (19,160) (20,200) (21.6,0) (26.6,0)
+};
+\addlegendentry{KB2-A (8 GW)}
+\draw[dashed, gray] (axis cs:15,0) -- (axis cs:15,220) node[above, font=\scriptsize, black]{bắt đầu outage};
+\draw[dashed, gray] (axis cs:20,0) -- (axis cs:20,220) node[above, font=\scriptsize, black]{Cloud online};
+\node[font=\scriptsize, fog8Green] at (axis cs:18,210) {warmup / outage (queue 0$\to$200) / drain 96s};
+\end{axis}
+\end{tikzpicture}
+\caption{Timeline Store-and-Forward KB2-A: warmup $\to$ outage (queue 0$\to$200) $\to$ drain (200$\to$0) $\to$ post-recovery.}
+\label{fig:kb2-timeline}
+\end{figure}
+
+8 GW drain chậm hơn 1 GW (96 s so với 71 s) do tranh chấp (contention) tại MQTT
+broker Cloud khi tám gateway drain đồng loạt. \Cref{fig:kb2a-grafana} là ảnh
+Grafana.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/fog/kb2a/store_forward_queue_depth.png}
+  \caption{Store-forward queue depth}
+\end{subfigure}\hfill
+\begin{subfigure}{0.49\textwidth}
+  \centering\grafana{images/fog/kb2a/summary_stat_panels_outage_queue200.png}
+  \caption{Summary panel khi outage (queue 200)}
+\end{subfigure}
+\caption{FOG-KB2-A (Grafana): queue depth và bảng tổng hợp lúc outage.}
+\label{fig:kb2a-grafana}
+\end{figure}
+
+\section{FOG-KB2-B --- Cloud Offline Recovery: 1 Gateway (Raspberry Pi 3)}
+
+\Cref{tab:fog-kb2b} trình bày kết quả của 1 gateway.
+
+\begin{table}[H]
+\centering
+\caption{Số liệu FOG-KB2-B (offline recovery, 1 gateway)}
+\label{tab:fog-kb2b}
+\small
+\begin{tabular}{p{0.45\textwidth} c}
+\toprule
+\textbf{Chỉ số} & \textbf{Giá trị} \\
+\midrule
+Max Queue Depth  & \textbf{25 batch} ($= 1 \times 5 \times 5$) \\
+Recovery Time    & \textbf{71 s} \\
+Data Loss        & \textbf{0,0\%} \\
+Drain Rate       & 0,352 batch/s \\
+Tuples xử lý (30 phút) & 175.879 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Cref{fig:kb2-compare} so sánh KB2-A và KB2-B trên ba chỉ số.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6.2cm,
+  ybar, bar width=16pt,
+  symbolic x coords={Queue (batch), Recovery (s), Drain x10 (batch/s)},
+  xtick=data, x tick label style={font=\scriptsize, align=center},
+  ylabel={Giá trị}, ymin=0, ymax=210, enlarge x limits=0.25,
+  legend style={at={(0.98,0.98)}, anchor=north east, font=\scriptsize},
+  nodes near coords, every node near coord/.append style={font=\tiny},
+]
+\addplot[fill=fog8Green!70] coordinates {(Queue (batch),200) (Recovery (s),96) (Drain x10 (batch/s),20.8)};
+\addplot[fill=fog1Orange!80] coordinates {(Queue (batch),25) (Recovery (s),71) (Drain x10 (batch/s),3.52)};
+\legend{KB2-A (8 GW), KB2-B (1 GW)}
+\end{axis}
+\end{tikzpicture}
+\caption{So sánh KB2-A vs KB2-B: queue depth, recovery time và drain rate ($\times 10$ để dễ nhìn).}
+\label{fig:kb2-compare}
+\end{figure}
+
+\section{Phân tích cơ chế Store-and-Forward}
+
+Cơ chế Store-and-Forward được mô hình hoá bằng các công thức:
+\begin{align}
+Q_{max} &= N_{GW} \times W_{windows} \times \left\lfloor \frac{T_{outage}}{T_{flush}} \right\rfloor \\
+\text{Drain rate} &= \frac{Q_{max}}{T_{recovery}} \\
+\text{Điều kiện hội tụ:}\quad & \frac{Q_{max}}{T_{rec}} > \frac{N_{GW} \times W}{T_{flush}}
+\end{align}
+
+\textbf{Kiểm chứng:}
+\begin{itemize}
+  \item KB2-A: $Q_{max} = 8 \times 5 \times 5 = 200$ batch (khớp đo);
+        drain rate $= 200/96 = 2{,}08 > 0{,}67$ batch/s tích luỹ $\checkmark$
+  \item KB2-B: $Q_{max} = 1 \times 5 \times 5 = 25$ batch (khớp đo);
+        drain rate $= 25/71 = 0{,}352 > 0{,}083$ batch/s tích luỹ $\checkmark$
+\end{itemize}
+
+Cả hai kịch bản đều thoả điều kiện hội tụ với biên độ lớn, giải thích vì sao
+queue không bao giờ có nguy cơ tràn trong các đợt outage ngắn và recovery nhanh
+hơn nhiều so với thời gian outage.
+
+%% ############################################################################
+\chapter{SO SÁNH VÀ PHÂN TÍCH}
+\label{ch:sosanh}
+%% ############################################################################
+
+\section{So sánh Scalability: Monolithic vs Fog}
+
+\Cref{tab:cl-compare} so sánh complete latency tại các nấc tải.
+
+\begin{table}[H]
+\centering
+\caption{Complete Latency so sánh tại các nấc tải}
+\label{tab:cl-compare}
+\small
+\begin{tabular}{c c c c c}
+\toprule
+\textbf{Nhà} & \textbf{Msg/s} & \textbf{MONO} & \textbf{FOG-8GW} & \textbf{FOG-1GW} \\
+\midrule
+1  & 10  & 55 ms     & N/A (sub-ms)  & 3,5 ms \\
+5  & 50  & 97 ms     & 4,5 ms        & 3,5 ms \\
+10 & 100 & 290 ms    & 14.520 ms*    & 8.729 ms* \\
+20 & 200 & 1.111 ms  & 34.974 ms*    & 46.123 ms* \\
+40 & 400 & 5.282 ms  & 84.499 ms*    & 93.387 ms* \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textit{* Chú thích: Complete Latency Fog cao do ngữ nghĩa cumulative
+của \code{REPLACE INTO} --- đo từ \code{event\_ts} đến lần ghi cuối. Độ trễ thực
+ghi lần đầu xấp xỉ 60 s. Hai hệ thống đo các đại lượng khác nhau --- xem
+\Cref{sec:why-latency}.}
+
+\subsection{Tại sao Complete Latency Fog \textgreater\ Mono?}
+\label{sec:why-latency}
+
+Monolithic tính complete latency từ thời điểm MQTT đến cho tới khi
+\code{Bolt\_forecast} ack (vài giây). Fog lại tính từ \code{event\_ts} của sensor
+đến cột \code{updatedAt} --- vốn luôn bằng \code{NOW()} của lần \code{REPLACE INTO}
+\textit{cuối cùng}. Vì mỗi flush 60 s lại cập nhật \code{updatedAt}, một bản ghi
+sinh lúc 14:20 sẽ có \code{updatedAt} = 14:50 $\to$ latency biểu kiến = 30 phút.
+Đây là artifact đo lường, không phải độ trễ xử lý thực. \Cref{tab:fair-compare}
+đưa ra so sánh công bằng dựa trên các chỉ số không bị artifact.
+
+\begin{table}[H]
+\centering
+\caption{So sánh công bằng dựa trên chỉ số không bị artifact}
+\label{tab:fair-compare}
+\small
+\begin{tabular}{p{0.26\textwidth} p{0.18\textwidth} p{0.22\textwidth} p{0.20\textwidth}}
+\toprule
+\textbf{Tiêu chí} & \textbf{Monolithic} & \textbf{Fog (8 GW)} & \textbf{Fog (1 GW)} \\
+\midrule
+Bolt Capacity tại h40 & \textbf{189\%} & \textbf{0\%} & \textbf{318,9\%} \\
+Bottleneck & Bolt\_split (cloud) & JVM cold-start h10 (tự phục hồi) & Bolt\_cloudMerge (không phục hồi) \\
+Spout throttle tại h40 & 199 ops/s (vs 400) & Không bị throttle & Bị throttle do overload \\
+Khả năng scale thêm & Không (đã saturate) & Có (còn nhiều headroom) & Không (318,9\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Cref{fig:cap-h40} là biểu đồ quan trọng nhất của đồ án: so sánh cloud bolt
+capacity tại h10, h20, h40 giữa ba hệ thống.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.86\textwidth, height=6.8cm,
+  ybar, bar width=11pt,
+  symbolic x coords={10,20,40}, xtick=data,
+  xlabel={Số nhà}, ylabel={Cloud Bolt Max Capacity (\%)},
+  ymin=0, ymax=340, enlarge x limits=0.35,
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+  nodes near coords, every node near coord/.append style={font=\tiny},
+]
+\addplot[fill=monoRed!75]   coordinates {(10,3.9) (20,89.8) (40,169)};
+\addplot[fill=fog8Green!75] coordinates {(10,91.2) (20,4.6) (40,0)};
+\addplot[fill=fog1Orange!85]coordinates {(10,0) (20,0) (40,318.9)};
+\legend{MONO, FOG-8GW, FOG-1GW}
+\draw[dashed, black] (axis cs:10,100) -- (axis cs:40,100)
+  node[pos=0.5, above, font=\scriptsize]{ngưỡng overload 100\%};
+\end{axis}
+\end{tikzpicture}
+\caption{So sánh Cloud Bolt Capacity: Fog 8 GW duy trì 0\% tại h40 trong khi Monolithic và Fog 1 GW đều overload.}
+\label{fig:cap-h40}
+\end{figure}
+
+\section{So sánh Tài nguyên tại h40}
+
+\Cref{tab:res-h40} so sánh tài nguyên toàn hệ thống tại 400 msg/s.
+
+\begin{table}[H]
+\centering
+\caption{Tài nguyên toàn hệ thống tại 400 msg/s}
+\label{tab:res-h40}
+\small
+\begin{tabular}{p{0.20\textwidth} c c c p{0.24\textwidth}}
+\toprule
+\textbf{Tài nguyên} & \textbf{MONO} & \textbf{FOG-8GW} & \textbf{FOG-1GW} & \textbf{Ghi chú} \\
+\midrule
+Cloud CPU       & $\sim$80\% & \textless 5\% & \textless 5\% & Fog nhẹ hơn ở cloud \\
+RAM tổng edge   & 0 MB       & 1.912 MB & 288 MB & Fog cần edge RAM \\
+CPU tổng edge   & 0          & $\sim$90\% & $\sim$11\% & Fog cần edge CPU \\
+WAN (KB/min)    & $\sim$2.400* & 332,8 & 396,1 & Fog giảm WAN 86\% \\
+Containers      & 1 (cloud)  & 8 (edge)+cloud & 1 (Pi 3)+cloud & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textit{* Ước tính raw: 400 msg/s $\times$ 100 bytes = 40.000 bytes/s = 2.400 KB/min.}
+
+\textbf{Phân tích sự đánh đổi.} \Cref{tab:res-h40} làm rõ rằng lợi ích về khả năng
+mở rộng của Fog \textit{không miễn phí} mà là kết quả của một sự dịch chuyển tài
+nguyên có chủ đích. Monolithic dồn toàn bộ gánh nặng lên Cloud (CPU $\sim$80\%,
+RAM lên tới vài GB) và không tốn tài nguyên biên; Fog làm ngược lại --- Cloud CPU
+giảm xuống dưới 5\% nhờ chỉ còn một bolt ghi đè, đổi lại hệ thống cần tài nguyên ở
+tầng biên. Điểm mấu chốt là \textit{bản chất} của tài nguyên biên này: nó rẻ và
+phân tán (Raspberry Pi, container nhẹ) thay vì đắt và tập trung (EC2 lớn). So sánh
+hai cấu hình Fog cho thấy một đánh đổi tinh tế: bản 8 gateway tốn nhiều RAM/CPU
+tổng hơn (1.912 MB, $\sim$90\%) nhưng phân tán trên 8 nút nên mỗi nút rất nhẹ và
+có khả năng cách ly lỗi; bản 1 gateway tiết kiệm tài nguyên tổng (288 MB, 11\%)
+nhưng dồn rủi ro vào một điểm. Về WAN, cả hai bản Fog đều giảm khoảng 83--86\% so
+với raw streaming --- một lợi ích chung không phụ thuộc số gateway. \Cref{fig:wan-compare}
+và \Cref{fig:ram-breakdown} trực quan hoá hai khía cạnh này.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=5.4cm,
+  xbar, bar width=18pt,
+  symbolic y coords={FOG-8GW, FOG-1GW, MONO raw}, ytick=data,
+  xlabel={WAN (KB/min)}, xmin=0, xmax=2750,
+  xtick={0,500,1000,1500,2000,2500},
+  enlarge y limits=0.3,
+  yticklabel style={font=\small},
+  nodes near coords, every node near coord/.append style={font=\scriptsize},
+]
+\addplot[fill=accentBlue!70] coordinates {(332.8,FOG-8GW) (396.1,FOG-1GW) (2400,MONO raw)};
+\end{axis}
+\end{tikzpicture}
+\caption{WAN Traffic tại h40: Fog giảm $\sim$86\% so với Monolithic raw.}
+\label{fig:wan-compare}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6cm,
+  ybar stacked, bar width=26pt,
+  symbolic x coords={MONO, FOG-8GW, FOG-1GW}, xtick=data,
+  ylabel={RAM (MB)}, ymin=0, ymax=5200, enlarge x limits=0.35,
+  legend style={at={(0.98,0.98)}, anchor=north east, font=\scriptsize},
+]
+\addplot[fill=accentBlue!60] coordinates {(MONO,4096) (FOG-8GW,1024) (FOG-1GW,1024)};
+\addplot[fill=fog1Orange!75] coordinates {(MONO,0) (FOG-8GW,1912) (FOG-1GW,288)};
+\legend{Cloud RAM, Edge RAM}
+\end{axis}
+\end{tikzpicture}
+\caption{Phân tách RAM: Monolithic dồn lên Cloud (RAM lớn); Fog phân bổ giữa Cloud (nhẹ) và biên.}
+\label{fig:ram-breakdown}
+\end{figure}
+
+\section{Traffic Reduction}
+
+\Cref{tab:traffic-reduction} tổng hợp mức giảm lưu lượng.
+
+\begin{table}[H]
+\centering
+\caption{Traffic Reduction so với Monolithic}
+\label{tab:traffic-reduction}
+\small
+\begin{tabular}{p{0.40\textwidth} c c}
+\toprule
+\textbf{Metric} & \textbf{FOG-KB1-A (8 GW)} & \textbf{FOG-KB1-B (1 GW)} \\
+\midrule
+Acked Tuple Reduction          & 65,8\%  & \textbf{95\%} \\
+Emitted/Transferred Reduction  & 52,5\%  & \textbf{92,5\%} \\
+WAN Traffic (vs raw 2.400)     & \textbf{$-86,1\%$} (332,8) & $-83,5\%$ (396,1) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Tuy 1 GW có tỷ lệ giảm acked/emitted cao hơn (do chỉ một luồng MQTT duy nhất,
+gọn hơn), nhưng tổng WAN của 1 GW lại \textit{cao hơn} 8 GW 19\%: với batch lớn
+chứa nhiều khoá khác nhau, tỷ lệ nén GZIP kém hơn so với nhiều batch nhỏ.
+\Cref{fig:traffic-reduction} trực quan hoá.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6cm,
+  ybar, bar width=16pt,
+  symbolic x coords={Acked, Emitted, WAN savings}, xtick=data,
+  ylabel={Tỷ lệ giảm (\%)}, ymin=0, ymax=100, enlarge x limits=0.3,
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+  nodes near coords, every node near coord/.append style={font=\tiny},
+]
+\addplot[fill=fog8Green!75]  coordinates {(Acked,65.8) (Emitted,52.5) (WAN savings,86.1)};
+\addplot[fill=fog1Orange!85] coordinates {(Acked,95) (Emitted,92.5) (WAN savings,83.5)};
+\legend{8 GW, 1 GW}
+\end{axis}
+\end{tikzpicture}
+\caption{Traffic Reduction: 8 GW vs 1 GW theo từng chỉ số.}
+\label{fig:traffic-reduction}
+\end{figure}
+
+\section{So sánh Fault Tolerance}
+
+\Cref{tab:fault} so sánh khả năng chịu lỗi.
+
+\begin{table}[H]
+\centering
+\caption{Khả năng chịu lỗi của ba hệ thống}
+\label{tab:fault}
+\small
+\begin{tabular}{p{0.26\textwidth} p{0.18\textwidth} p{0.22\textwidth} p{0.20\textwidth}}
+\toprule
+\textbf{Tình huống} & \textbf{MONO} & \textbf{FOG-8GW} & \textbf{FOG-1GW} \\
+\midrule
+Cloud MQTT offline 5 phút & 100\% mất dữ liệu & 0\% loss, 96s recovery & 0\% loss, 71s recovery \\
+Edge khi cloud down       & Không có edge     & Tiếp tục 100\%        & Tiếp tục 100\% \\
+1 gateway lỗi             & N/A               & 12,5\% nhà ảnh hưởng  & 100\% nhà ảnh hưởng \\
+Restart gateway           & N/A               & Queue giữ data, drain sau restart & Queue giữ data \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Phân tích.} \Cref{tab:fault} cho thấy khác biệt về khả năng chịu lỗi giữa
+Monolithic và Fog không phải là khác biệt mức độ mà là khác biệt \textit{bản
+chất}. Monolithic không có tầng biên nên khi Cloud mất kết nối, không có nơi nào
+lưu giữ dữ liệu --- toàn bộ dữ liệu trong thời gian gián đoạn mất vĩnh viễn. Cả
+hai bản Fog đều đạt 0\% mất dữ liệu nhờ Store-and-Forward, và vẫn tiếp tục xử lý
+tại biên khi Cloud down. Sự khác biệt quan trọng giữa hai bản Fog nằm ở dòng
+\textit{1 gateway lỗi}: với 8 gateway, một sự cố chỉ ảnh hưởng 1/8 = \textbf{12,5\%}
+số nhà, thể hiện tính \textit{cách ly lỗi} (fault isolation); ngược lại, với 1
+gateway, một sự cố làm sập toàn bộ 40 nhà. Đây là lập luận mạnh nhất ủng hộ cấu
+hình nhiều gateway trong các triển khai đòi hỏi độ sẵn sàng cao, dù bản 1 gateway
+có thời gian phục hồi nhanh hơn (71 s so với 96 s) do không bị tranh chấp broker
+khi drain.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=6cm,
+  ybar, bar width=16pt,
+  symbolic x coords={Max Queue, Recovery (s), Data Loss (\%)}, xtick=data,
+  ylabel={Giá trị}, ymin=0, ymax=210, enlarge x limits=0.3,
+  legend style={at={(0.98,0.98)}, anchor=north east, font=\scriptsize},
+  nodes near coords, every node near coord/.append style={font=\tiny},
+]
+\addplot[fill=fog8Green!75]  coordinates {(Max Queue,200) (Recovery (s),96) (Data Loss (\%),0)};
+\addplot[fill=fog1Orange!85] coordinates {(Max Queue,25) (Recovery (s),71) (Data Loss (\%),0)};
+\legend{KB2-A (8 GW), KB2-B (1 GW)}
+\end{axis}
+\end{tikzpicture}
+\caption{Recovery Metrics KB2: queue depth, recovery time và data loss.}
+\label{fig:recovery-metrics}
+\end{figure}
+
+\section{Energy Optimizer --- CPU theo trạng thái}
+
+\Cref{fig:energy} so sánh CPU mỗi gateway ở ba trạng thái, làm rõ lợi ích của cơ
+chế tự động pause. Khi chỉ 2/8 gateway có nhà active (nấc h10), 6 gateway nhàn rỗi
+được đưa về CPU 0\%.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.8\textwidth, height=5.6cm,
+  ybar, bar width=26pt,
+  symbolic x coords={Running+traffic, Running idle, Paused}, xtick=data,
+  ylabel={CPU mỗi GW (\%)}, ymin=0, ymax=18, enlarge x limits=0.3,
+  nodes near coords, every node near coord/.append style={font=\scriptsize},
+]
+\addplot[fill=fog8Green!70, point meta=explicit symbolic]
+  coordinates {(Running+traffic,13) [13\%] (Running idle,3) [3\%] (Paused,0) [0\%]};
+\node[font=\scriptsize, align=center] at (axis cs:Paused,5) {cgroups freezer\\ wake \textless 50ms};
+\end{axis}
+\end{tikzpicture}
+\caption{Energy Optimizer: CPU gateway theo trạng thái hoạt động (chỉ áp dụng FOG-8GW).}
+\label{fig:energy}
+\end{figure}
+
+\section{Ma trận so sánh toàn diện}
+
+\Cref{tab:matrix} là ma trận so sánh cuối cùng giữa ba hệ thống.
+
+\begin{table}[H]
+\centering
+\caption{Ma trận so sánh toàn diện MONO vs FOG-8GW vs FOG-1GW}
+\label{tab:matrix}
+\scriptsize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{p{0.26\textwidth} c p{0.14\textwidth} p{0.16\textwidth} p{0.16\textwidth}}
+\toprule
+\textbf{Tiêu chí} & \textbf{Trọng số} & \textbf{MONO} & \textbf{FOG-8GW} & \textbf{FOG-1GW} \\
+\midrule
+Scalability (cap. h40)   & 25\% & Tệ (169\%) & \textbf{Tốt (0\%)} & Tệ (318,9\%) \\
+Traffic Reduction WAN    & 20\% & 0\% & $-86,1\%$ & $-83,5\%$ \\
+Fault Tolerance          & 20\% & 0\% phòng vệ & \textbf{0\% loss, 96s} & 0\% loss, 71s \\
+Edge Resource (RAM+CPU)  & 15\% & \textbf{Không cần} & 1.912MB, $\sim$90\% & 288MB, 11\% \\
+Deployment Complexity    & 10\% & \textbf{Đơn giản nhất} & Phức tạp (8 nút) & Trung bình \\
+Bottleneck Risk          & 10\% & Bolt\_split & \textbf{Không (h40)} & Bolt\_cloudMerge \\
+Energy Optimization      & bonus& Không có & \textbf{Auto-pause (CPU 0\%)} & N/A (1 GW) \\
+\bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\textbf{Tổng hợp và kết luận so sánh.} Nếu quy đổi mỗi tiêu chí thành thang điểm
+0--10 và lấy trung bình theo trọng số trong \Cref{tab:matrix}, ta có điểm tổng hợp
+mang tính minh hoạ: \textbf{FOG-8GW $\approx$ 8,3/10}, \textbf{FOG-1GW $\approx$
+5,4/10} và \textbf{MONO $\approx$ 3,2/10}. Ba con số này tóm gọn toàn bộ phần so
+sánh: kiến trúc Fog 8 gateway vượt trội ở đúng những tiêu chí có trọng số cao nhất
+(khả năng mở rộng, chịu lỗi, giảm WAN) và chỉ thua ở các tiêu chí trọng số thấp
+hơn (tài nguyên biên, độ phức tạp triển khai). Đáng chú ý, MONO và FOG-1GW tuy
+cùng bị overload tại h40 nhưng vì \textit{hai nguyên nhân trái ngược}: MONO nghẽn
+ở khâu phân loại đầu vào (\code{Bolt\_split}), còn FOG-1GW nghẽn ở khâu ghi DB
+(\code{Bolt\_cloudMerge}) do dồn toàn bộ 40 nhà vào một batch. Điều này cho thấy
+việc \textit{phân tán} tải ra nhiều gateway --- chứ không chỉ riêng việc tách tầng
+Fog --- mới là yếu tố quyết định khả năng mở rộng. Bảng xếp hạng vì vậy không nên
+đọc là ``Fog luôn tốt hơn Monolithic'', mà là ``Fog phân tán đúng cách mới giải
+quyết được bài toán quy mô lớn'', dẫn tới các khuyến nghị cụ thể ở \Cref{sec:khuyennghi}.
+
+\section{Ngưỡng và Khuyến nghị}
+\label{sec:khuyennghi}
+
+Dựa trên kết quả đo, đồ án đưa ra các khuyến nghị triển khai:
+\begin{itemize}
+  \item \textbf{Dùng FOG-8GW khi:} $\ge 20$ nhà, yêu cầu cách ly lỗi (fault
+        isolation), băng thông WAN hạn chế, và có sẵn nhiều Raspberry Pi.
+  \item \textbf{Dùng FOG-1GW khi:} $\le 10$ nhà (cloud capacity \textless 35\%
+        an toàn), chỉ có một Pi 3, ưu tiên đơn giản hoá triển khai.
+  \item \textbf{Không dùng MONO khi:} \textgreater 10 nhà --- bắt đầu degradation;
+        \textgreater 20 nhà --- overload nghiêm trọng.
+\end{itemize}
+
+\Cref{fig:roadmap} phác hoạ lộ trình scalability (có ngoại suy cho 80 và 160 nhà).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.86\textwidth, height=6.8cm,
+  xlabel={Số nhà}, ylabel={Cloud Bolt Capacity (\%)},
+  xmode=log, log basis x=2, xmin=1, xmax=160,
+  ymin=0, ymax=400,
+  xtick={1,5,10,20,40,80,160}, xticklabels={1,5,10,20,40,80*,160*},
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+]
+\addplot[monoRed, very thick, mark=square*, dashed] coordinates {(1,45.5)(5,11.2)(10,3.9)(20,89.8)(40,169)(80,340)(160,400)};
+\addplot[fog8Green, very thick, mark=*] coordinates {(1,0)(5,0)(10,91.2)(20,4.6)(40,0)(80,5)(160,15)};
+\addplot[fog1Orange, very thick, mark=triangle*, dashed] coordinates {(1,35.3)(5,21.2)(10,1)(20,1)(40,318.9)(80,400)(160,400)};
+\legend{MONO (ngoại suy), FOG-8GW, FOG-1GW (ngoại suy)}
+\draw[dashed, black] (axis cs:1,100) -- (axis cs:160,100) node[pos=0.5, above, font=\scriptsize]{giới hạn 100\%};
+\end{axis}
+\end{tikzpicture}
+\caption{Lộ trình scalability: vùng \textless 100\% là healthy, \textgreater 100\% là overload. (* ngoại suy)}
+\label{fig:roadmap}
+\end{figure}
+
+%% ############################################################################
+\chapter{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}
+\label{ch:ketluan}
+%% ############################################################################
+
+\section{Kết quả đạt được}
+
+Đồ án đã đạt được năm kết quả chính:
+
+\begin{enumerate}
+  \item Thiết kế và triển khai thành công hệ thống Fog Computing trên Apache
+        Storm với \textbf{mười cải tiến kỹ thuật} so với kiến trúc Monolithic.
+  \item Chứng minh Fog-8GW đạt \textbf{0\%} cloud bolt capacity tại h40 so với
+        Monolithic \textbf{169\%} --- loại bỏ hoàn toàn điểm nghẽn trung tâm.
+  \item Cơ chế Store-and-Forward đạt \textbf{0\% mất dữ liệu} trong 5 phút outage,
+        phục hồi trong \textbf{71--96 s}.
+  \item Giảm lưu lượng WAN khoảng \textbf{86\%} (332,8 so với $\sim$2.400 KB/min
+        ước tính raw).
+  \item Gateway Raspberry Pi 3 xử lý 50 msg/s với execute latency \textbf{\textless 0,1 ms}
+        và bolt capacity \textbf{\textless 1\%} --- còn headroom rất lớn.
+\end{enumerate}
+
+\section{Hạn chế và điểm chưa hoàn thiện}
+
+\begin{enumerate}
+  \item Fog-1GW bị overload tại h40 (318,9\%) --- cần cải thiện
+        \code{Bolt\_cloudMerge} bằng batch transaction.
+  \item End-to-end latency là artifact đo lường --- cần cơ chế \code{event\_ts}
+        riêng cho lần ghi đầu tiên.
+  \item Chưa triển khai đủ 8 Raspberry Pi 3 vật lý (mới dùng 1 Pi + 7 Docker).
+  \item Chưa đánh giá tiêu thụ điện năng phần cứng của Raspberry Pi 3.
+\end{enumerate}
+
+\section{Hướng phát triển}
+
+\begin{enumerate}
+  \item Tối ưu \code{Bolt\_cloudMerge}: ghi nhiều dòng trong một transaction để
+        giảm overhead trên mỗi dòng.
+  \item Thêm cửa sổ 5 phút và 1 giờ để so sánh trực tiếp với 8 cửa sổ của
+        Monolithic.
+  \item Auto-scaling gateway: tự động tăng số gateway khi tải tăng.
+  \item Triển khai hoàn toàn trên cụm Raspberry Pi 3 (Kubernetes k3s).
+  \item Mã hoá payload MQTT (TLS) kết hợp GZIP trong môi trường production.
+  \item So sánh thêm với Apache Flink và Apache Spark Streaming.
+\end{enumerate}
+
+%% ############################################################################
+%%  TÀI LIỆU THAM KHẢO
+%% ############################################################################
+\begin{thebibliography}{99}
+\addcontentsline{toc}{chapter}{Tài liệu tham khảo}
+
+\bibitem{bonomi2012} F. Bonomi, R. Milito, J. Zhu, and S. Addepalli,
+``Fog computing and its role in the internet of things,'' in
+\textit{Proc. 1st MCC Workshop on Mobile Cloud Computing}, 2012, pp. 13--16.
+
+\bibitem{nist2018} M. Iorga \textit{et al.}, ``Fog Computing Conceptual Model,''
+NIST Special Publication 500-325, National Institute of Standards and Technology,
+2018.
+
+\bibitem{openfog2017} OpenFog Consortium, ``OpenFog Reference Architecture for
+Fog Computing,'' OPFRA001.020817, 2017.
+
+\bibitem{shi2016} W. Shi, J. Cao, Q. Zhang, Y. Li, and L. Xu,
+``Edge computing: Vision and challenges,'' \textit{IEEE Internet of Things
+Journal}, vol. 3, no. 5, pp. 637--646, 2016.
+
+\bibitem{yi2015} S. Yi, C. Li, and Q. Li, ``A survey of fog computing: Concepts,
+applications and issues,'' in \textit{Proc. Workshop on Mobile Big Data}, 2015,
+pp. 37--42.
+
+\bibitem{storm} Apache Software Foundation, ``Apache Storm Documentation,''
+\url{https://storm.apache.org/}, truy cập 2026.
+
+\bibitem{toshniwal2014} A. Toshniwal \textit{et al.}, ``Storm@twitter,'' in
+\textit{Proc. ACM SIGMOD}, 2014, pp. 147--156.
+
+\bibitem{mqtt} OASIS, ``MQTT Version 5.0 Specification,'' OASIS Standard, 2019.
+
+\bibitem{psaras2018} I. Psaras \textit{et al.}, ``Mobile data repositories at the
+edge,'' in \textit{USENIX HotEdge}, 2018.
+
+\bibitem{refit} D. Murray, L. Stankovic, and V. Stankovic, ``An electrical load
+measurements dataset of United Kingdom households from a two-year longitudinal
+study,'' \textit{Scientific Data}, vol. 4, 160122, 2017.
+
+\bibitem{prometheus} Prometheus Authors, ``Prometheus: Monitoring system and
+time series database,'' \url{https://prometheus.io/docs/}, truy cập 2026.
+
+\bibitem{grafana} Grafana Labs, ``Grafana Documentation,''
+\url{https://grafana.com/docs/}, truy cập 2026.
+
+\bibitem{docker} Docker Inc., ``Docker Documentation,''
+\url{https://docs.docker.com/}, truy cập 2026.
+
+\bibitem{mysql} Oracle, ``MySQL 8.4 Reference Manual,''
+\url{https://dev.mysql.com/doc/}, truy cập 2026.
+
+\bibitem{atzori2010} L. Atzori, A. Iera, and G. Morabito, ``The internet of
+things: A survey,'' \textit{Computer Networks}, vol. 54, no. 15,
+pp. 2787--2805, 2010.
+
+\bibitem{gubbi2013} J. Gubbi, R. Buyya, S. Marusic, and M. Palaniswami,
+``Internet of Things (IoT): A vision, architectural elements, and future
+directions,'' \textit{Future Generation Computer Systems}, vol. 29, no. 7,
+pp. 1645--1660, 2013.
+
+\bibitem{satyanarayanan2017} M. Satyanarayanan, ``The emergence of edge
+computing,'' \textit{Computer}, vol. 50, no. 1, pp. 30--39, 2017.
+
+\bibitem{dastjerdi2016} A. V. Dastjerdi and R. Buyya, ``Fog computing: Helping
+the internet of things realize its potential,'' \textit{Computer}, vol. 49,
+no. 8, pp. 112--116, 2016.
+
+\bibitem{mahmud2018} R. Mahmud, R. Kotagiri, and R. Buyya, ``Fog computing: A
+taxonomy, survey and future directions,'' in \textit{Internet of Everything},
+Springer, 2018, pp. 103--130.
+
+\bibitem{naha2018} R. K. Naha \textit{et al.}, ``Fog computing: Survey of trends,
+architectures, requirements, and research directions,'' \textit{IEEE Access},
+vol. 6, pp. 47980--48009, 2018.
+
+\bibitem{hu2017} P. Hu, S. Dhelim, H. Ning, and T. Qiu, ``Survey on fog
+computing: architecture, key technologies, applications and open issues,''
+\textit{Journal of Network and Computer Applications}, vol. 98, pp. 27--42, 2017.
+
+\bibitem{yousefpour2019} A. Yousefpour \textit{et al.}, ``All one needs to know
+about fog computing and related edge computing paradigms: A complete survey,''
+\textit{Journal of Systems Architecture}, vol. 98, pp. 289--330, 2019.
+
+\end{thebibliography}
+
+%% ############################################################################
+%%  PHỤ LỤC
+%% ############################################################################
+\appendix
+\addcontentsline{toc}{chapter}{Phụ lục}
+
+\chapter{Giải thích artifact End-to-End Latency}
+\label{app:artifact}
+
+Cột \code{updatedAt} trong bảng \code{fog\_device\_data} được gán bằng
+\code{NOW()} tại mỗi lệnh \code{REPLACE INTO}. Do gateway gửi \textit{cumulative
+totals} mỗi 60 giây, cùng một khoá bản ghi sẽ bị ghi đè nhiều lần, và
+\code{updatedAt} luôn phản ánh lần ghi \textit{cuối cùng}. Khi tính End-to-End
+latency $= updatedAt - event\_ts$, kết quả là khoảng cách từ thời điểm sự kiện
+gốc đến lần cập nhật cuối --- có thể lên tới hàng trăm giây (p50 = 655 s,
+p95 = 1.258 s đối với Monolithic; p50 = 408.626 ms đối với Fog-1GW). Đây
+\textbf{không} phải độ trễ xử lý thực. Độ trễ ghi lần đầu thực tế xấp xỉ 60--65 s
+(chu kỳ flush + xử lý Cloud). Để đo chính xác cần lưu thêm cột \code{firstWrittenAt}
+chỉ gán một lần.
+
+\chapter{Code snippets quan trọng}
+\label{app:code}
+
+\begin{lstlisting}[language=Java,caption={drainQueue() --- chuyển tiếp hàng đợi đĩa}]
+void drainQueue() {
+  List<byte[]> batches = readAll("queue.jsonl");
+  for (byte[] b : batches) {
+    try {
+      mqtt.publish("fog-data", b);  // gui lai theo thu tu
+      removeEntry(b);               // xoa khi thanh cong
+    } catch (MqttException e) {
+      break;                        // dung neu cloud van offline
+    }
+  }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Java,caption={Bolt\_cloudMerge.execute() --- ghi idempotent}]
+public void execute(Tuple t) {
+  byte[] gz = (byte[]) t.getValueByField("batch");
+  List<Record> recs = parse(gunzip(gz));
+  for (Record r : recs) {
+    stmt.execute(
+      "REPLACE INTO fog_device_data " +
+      "(house_id,household_id,device_id,slice_gap,slice_index,value,count,updatedAt) " +
+      "VALUES (" + r.toSql() + ", NOW())");
+  }
+  collector.ack(t);
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Java,caption={Phát hiện bất thường EWMA z-score}]
+double mu = ewmaMu.getOrDefault(dev, value);
+double var = ewmaVar.getOrDefault(dev, 1.0);
+double z = (value - mu) / Math.sqrt(var);
+if (Math.abs(z) > 3.0) sendSlackAlert(house, dev, value, z);
+// cap nhat EWMA (alpha = 0.1)
+ewmaMu.put(dev, 0.9 * mu + 0.1 * value);
+ewmaVar.put(dev, 0.9 * var + 0.1 * (value - mu) * (value - mu));
+\end{lstlisting}
+
+\chapter{Cấu hình Docker Compose}
+\label{app:compose}
+
+\Cref{tab:compose} tóm tắt các service và cổng chính trong
+\code{docker-compose.yml}.
+
+\begin{table}[H]
+\centering
+\caption{Các service và cổng trong Docker Compose}
+\label{tab:compose}
+\small
+\begin{tabular}{p{0.26\textwidth} p{0.16\textwidth} p{0.44\textwidth}}
+\toprule
+\textbf{Service} & \textbf{Cổng} & \textbf{Vai trò} \\
+\midrule
+mosquitto      & 1883       & MQTT broker (iot-data, fog-data) \\
+fog-gateway    & 8080--8087 & Storm LocalCluster + Prometheus exporter mỗi GW \\
+storm-cloud    & 6700+      & Cụm Storm Cloud (Bolt\_cloudMerge) \\
+mysql          & 3306       & Lưu trữ fog\_device\_data \\
+prometheus     & 9090       & Thu thập metric \\
+grafana        & 3000       & Trực quan hoá \\
+web-dashboard  & 9000       & Giao diện người dùng \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\chapter{Prometheus Queries}
+\label{app:promql}
+
+Các truy vấn PromQL chính dùng để đo metric:
+
+\begin{lstlisting}[caption={Các PromQL query chính}]
+# Cloud bolt capacity
+storm_bolt_capacity{topology="fog-cloud", component="Bolt_cloudMerge"}
+
+# Gateway execute latency (EMA)
+rate(fog_gateway_execute_latency_sum[1m])
+  / rate(fog_gateway_execute_latency_count[1m])
+
+# WAN traffic (KB/min)
+rate(fog_gateway_publish_size_bytes[1m]) * 60 / 1024
+
+# Store-and-Forward queue depth
+fog_gateway_store_queue_size
+\end{lstlisting}
+
+\chapter{Danh sách ảnh Grafana}
+\label{app:images}
+
+\Cref{tab:img-map} ánh xạ tên tệp ảnh $\to$ metric $\to$ kịch bản đo.
+
+{\scriptsize
+\begin{longtable}{p{0.52\textwidth} p{0.20\textwidth} p{0.14\textwidth}}
+\caption{Bản đồ ảnh Grafana đã sử dụng}
+\label{tab:img-map}\\
+\toprule
+\textbf{Tệp ảnh} & \textbf{Metric} & \textbf{Kịch bản} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Tệp ảnh} & \textbf{Metric} & \textbf{Kịch bản} \\
+\midrule
+\endhead
+\code{mono/s1\_ramp\_bolt\_capacity.png}      & Bolt capacity      & MONO-KB1 \\
+\code{mono/s1\_ramp\_complete\_latency.png}   & Complete latency   & MONO-KB1 \\
+\code{mono/s2\_steady\_bolt\_capacity.png}    & Bolt capacity      & MONO-KB2 \\
+\code{mono/s2\_steady\_topology\_throughput.png} & Topology throughput & MONO-KB2 \\
+\code{fog/kb1a/cloud\_bolt\_capacity\_600s.png}  & Cloud capacity  & FOG-KB1-A \\
+\code{fog/kb1a/all\_gateways\_bolt\_capacity.png}& GW capacity     & FOG-KB1-A \\
+\code{fog/kb1b/cloud\_bolt\_capacity\_600s.png}  & Cloud capacity  & FOG-KB1-B \\
+\code{fog/kb1b/summary\_stat\_panels.png}        & Summary         & FOG-KB1-B \\
+\code{fog/kb2a/store\_forward\_queue\_depth.png} & Queue depth     & FOG-KB2-A \\
+\code{fog/kb2a/summary\_stat\_panels\_outage\_queue200.png} & Summary outage & FOG-KB2-A \\
+\code{fog/kb2b/store\_forward\_queue\_depth.png} & Queue depth     & FOG-KB2-B \\
+\code{fog/kb2b/summary\_stat\_panels\_outage\_queue25.png} & Summary outage & FOG-KB2-B \\
+\bottomrule
+\end{longtable}
+}
+
+\end{document}

@@ -24,3 +24,9 @@ fog-gateway/config/alert-routes.json
 .vscode/
 .bloop/
 *.code-workspace
+.gstack/
+node_modules/
+__pycache__/
+*.pyc
+*.bak
+

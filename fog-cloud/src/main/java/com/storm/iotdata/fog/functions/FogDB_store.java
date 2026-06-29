@@ -48,11 +48,15 @@ public class FogDB_store {
                 "  count DOUBLE DEFAULT 0," +
                 "  updatedAt BIGINT," +
                 "  event_ts BIGINT DEFAULT 0," +
+                "  firstWrittenAt BIGINT DEFAULT 0," +
                 "  PRIMARY KEY (houseId, householdId, deviceId, year, month, day, sliceIndex, sliceGap)" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8"
             );
-            // [metrics] ensure event_ts exists on pre-existing DBs (MySQL lacks ADD COLUMN IF NOT EXISTS)
+            // [metrics] ensure event_ts / firstWrittenAt exist on pre-existing DBs
+            // (MySQL lacks ADD COLUMN IF NOT EXISTS — try/catch is the idiom used here).
             try { st.executeUpdate("ALTER TABLE fog_device_data ADD COLUMN event_ts BIGINT DEFAULT 0"); }
+            catch (SQLException ignore) { /* column already present */ }
+            try { st.executeUpdate("ALTER TABLE fog_device_data ADD COLUMN firstWrittenAt BIGINT DEFAULT 0"); }
             catch (SQLException ignore) { /* column already present */ }
             st.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS fog_household_data (" +
@@ -83,6 +87,18 @@ public class FogDB_store {
                 "  PRIMARY KEY (houseId, year, month, day, sliceIndex, sliceGap)" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8"
             );
+            // Forecast output (parity with monolithic Bolt_forecast). One generic table
+            // for device/household/house levels: level + opaque key + window.
+            st.executeUpdate(
+                "CREATE TABLE IF NOT EXISTS fog_forecast (" +
+                "  level VARCHAR(16) NOT NULL," +
+                "  keyStr VARCHAR(128) NOT NULL," +
+                "  sliceGap INT NOT NULL," +
+                "  forecastValue DOUBLE DEFAULT 0," +
+                "  updatedAt BIGINT," +
+                "  PRIMARY KEY (level, keyStr, sliceGap)" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8"
+            );
             System.out.println("[FogDB_store] Fog tables initialized.");
         } catch (SQLException e) {
             System.err.println("[FogDB_store] initFogTables failed: " + e.getMessage());
@@ -97,12 +113,20 @@ public class FogDB_store {
      */
     public void upsertDeviceData(Map<String, double[]> acc, Map<String, Long> eventTs, int sliceGap) {
         if (acc.isEmpty()) return;
-        String sql = "REPLACE INTO fog_device_data " +
-                     "(houseId, householdId, deviceId, year, month, day, sliceIndex, sliceGap, sumValue, count, updatedAt, event_ts) " +
-                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
+        // INSERT ... ON DUPLICATE KEY UPDATE (not REPLACE) so firstWrittenAt is set
+        // ONCE (first insert) and never overwritten — that gives e2e_first_write_latency.
+        // updatedAt is always refreshed — that gives e2e_last_write_latency (artifact).
+        // The two are distinct metrics (prompt §2.2); the SQL keeps them independent.
+        String sql = "INSERT INTO fog_device_data " +
+                     "(houseId, householdId, deviceId, year, month, day, sliceIndex, sliceGap, sumValue, count, updatedAt, event_ts, firstWrittenAt) " +
+                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+                     "ON DUPLICATE KEY UPDATE sumValue=VALUES(sumValue), count=VALUES(count), " +
+                     "updatedAt=VALUES(updatedAt), event_ts=VALUES(event_ts)";  // firstWrittenAt intentionally untouched
+        boolean perRow = config.isCloudMergePerRow();
         long now = System.currentTimeMillis();
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            conn.setAutoCommit(perRow);   // batched: one txn/flush · perrow: autocommit each row (OLD path)
             int batch = 0;
             for (Map.Entry<String, double[]> e : acc.entrySet()) {
                 String[] p = e.getKey().split(":");
@@ -116,12 +140,17 @@ public class FogDB_store {
                 ps.setInt(8, sliceGap);
                 ps.setDouble(9, e.getValue()[1]);      // sumValue
                 ps.setDouble(10, e.getValue()[0]);     // count
-                ps.setLong(11, now);
-                ps.setLong(12, eventTs == null ? 0L : eventTs.getOrDefault(e.getKey(), 0L)); // [metrics]
-                ps.addBatch();
-                if (++batch % 500 == 0) ps.executeBatch();
+                ps.setLong(11, now);                   // updatedAt (always)
+                ps.setLong(12, eventTs == null ? 0L : eventTs.getOrDefault(e.getKey(), 0L)); // event_ts
+                ps.setLong(13, now);                   // firstWrittenAt (ignored on dup-key)
+                if (perRow) {
+                    ps.executeUpdate();                // N round-trips, N commits (reproduces 318.9%)
+                } else {
+                    ps.addBatch();
+                    if (++batch % 500 == 0) ps.executeBatch();
+                }
             }
-            ps.executeBatch();
+            if (!perRow) { ps.executeBatch(); conn.commit(); }
         } catch (SQLException ex) {
             System.err.println("[FogDB_store] upsertDeviceData failed: " + ex.getMessage());
         }
@@ -137,8 +166,10 @@ public class FogDB_store {
                      "(houseId, householdId, year, month, day, sliceIndex, sliceGap, sumValue, count, updatedAt) " +
                      "VALUES (?,?,?,?,?,?,?,?,?,?)";
         long now = System.currentTimeMillis();
+        boolean perRow = config.isCloudMergePerRow();
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            conn.setAutoCommit(perRow);   // batched: one txn/flush · perrow: autocommit each row
             int batch = 0;
             for (Map.Entry<String, double[]> e : acc.entrySet()) {
                 String[] p = e.getKey().split(":");
@@ -152,10 +183,10 @@ public class FogDB_store {
                 ps.setDouble(8, e.getValue()[1]);
                 ps.setDouble(9, e.getValue()[0]);
                 ps.setLong(10, now);
-                ps.addBatch();
-                if (++batch % 500 == 0) ps.executeBatch();
+                if (perRow) { ps.executeUpdate(); }
+                else { ps.addBatch(); if (++batch % 500 == 0) ps.executeBatch(); }
             }
-            ps.executeBatch();
+            if (!perRow) { ps.executeBatch(); conn.commit(); }
         } catch (SQLException ex) {
             System.err.println("[FogDB_store] upsertHouseholdData failed: " + ex.getMessage());
         }
@@ -171,8 +202,10 @@ public class FogDB_store {
                      "(houseId, year, month, day, sliceIndex, sliceGap, sumValue, count, updatedAt) " +
                      "VALUES (?,?,?,?,?,?,?,?,?)";
         long now = System.currentTimeMillis();
+        boolean perRow = config.isCloudMergePerRow();
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            conn.setAutoCommit(perRow);   // batched: one txn/flush · perrow: autocommit each row
             int batch = 0;
             for (Map.Entry<String, double[]> e : acc.entrySet()) {
                 String[] p = e.getKey().split(":");
@@ -185,12 +218,42 @@ public class FogDB_store {
                 ps.setDouble(7, e.getValue()[1]);
                 ps.setDouble(8, e.getValue()[0]);
                 ps.setLong(9, now);
-                ps.addBatch();
-                if (++batch % 500 == 0) ps.executeBatch();
+                if (perRow) { ps.executeUpdate(); }
+                else { ps.addBatch(); if (++batch % 500 == 0) ps.executeBatch(); }
             }
-            ps.executeBatch();
+            if (!perRow) { ps.executeBatch(); conn.commit(); }
         } catch (SQLException ex) {
             System.err.println("[FogDB_store] upsertHouseData failed: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Upsert forecast values (one transaction). fc: keyStr -> forecastValue.
+     * level ∈ {device, household, house}. Mirrors monolithic forecast persistence
+     * so the Fog cloud performs the same write workload.
+     */
+    public void upsertForecast(Map<String, Double> fc, String level, int sliceGap) {
+        if (fc == null || fc.isEmpty()) return;
+        String sql = "REPLACE INTO fog_forecast (level, keyStr, sliceGap, forecastValue, updatedAt) " +
+                     "VALUES (?,?,?,?,?)";
+        long now = System.currentTimeMillis();
+        boolean perRow = config.isCloudMergePerRow();
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            conn.setAutoCommit(perRow);   // batched: one txn/flush · perrow: autocommit each row
+            int batch = 0;
+            for (Map.Entry<String, Double> e : fc.entrySet()) {
+                ps.setString(1, level);
+                ps.setString(2, e.getKey());
+                ps.setInt(3, sliceGap);
+                ps.setDouble(4, e.getValue());
+                ps.setLong(5, now);
+                if (perRow) { ps.executeUpdate(); }
+                else { ps.addBatch(); if (++batch % 500 == 0) ps.executeBatch(); }
+            }
+            if (!perRow) { ps.executeBatch(); conn.commit(); }
+        } catch (SQLException ex) {
+            System.err.println("[FogDB_store] upsertForecast failed: " + ex.getMessage());
         }
     }
 }

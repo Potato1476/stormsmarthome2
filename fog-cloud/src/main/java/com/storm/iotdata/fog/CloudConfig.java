@@ -24,6 +24,16 @@ public class CloudConfig implements Serializable {
     // Windows received directly from gateways
     private final List<Integer> gatewayWindows  = Arrays.asList(1, 5, 10, 15, 30);
 
+    // Forecast stage (parity with monolithic Bolt_forecast). Default ON so the
+    // Fog cloud performs the SAME analytical work (device/household/house forecast)
+    // as the Monolithic baseline — required for a fair scalability comparison.
+    private final boolean forecastEnabled;
+
+    // DB write strategy. "batched" (default) = one transaction per flush + JDBC batch
+    // (the fix for the 318.9% artifact). "perrow" = autocommit per row (the OLD path),
+    // kept measurable so we can REPORT both numbers honestly (prompt §6.3).
+    private final boolean cloudMergePerRow;
+
     // ── Alert / Notification thresholds ──────────────────────────────────────
     private final double alertDeviceMaxW;    // per-device Watt threshold
     private final double alertHouseMaxW;     // per-house  Watt threshold
@@ -46,6 +56,9 @@ public class CloudConfig implements Serializable {
         alertCooldownMs  = Long.parseLong(env("ALERT_COOLDOWN_SEC", "60")) * 1000L;
         alertWindowMin   = Integer.parseInt(env("ALERT_WINDOW_MIN",  "5"));
         alertMqttTopic   = env("ALERT_MQTT_TOPIC", "iot-notification");
+
+        forecastEnabled  = Boolean.parseBoolean(env("FORECAST_ENABLED", "true"));
+        cloudMergePerRow = "perrow".equalsIgnoreCase(env("CLOUDMERGE_MODE", "batched"));
     }
 
     private static String env(String name, String def) {
@@ -55,13 +68,35 @@ public class CloudConfig implements Serializable {
 
     public String getCloudMqttUrl()      { return "tcp://" + cloudMqttHost + ":" + cloudMqttPort; }
     public String getAggSubscribeTopic() { return "fog/agg/#"; }
-    public String getDbJdbcUrl()         { return "jdbc:mysql://" + dbHost + ":3306/" + dbName + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"; }
+    // rewriteBatchedStatements=true collapses addBatch() into ONE multi-row statement
+    // (instead of N round-trips). Without it, a 200-row REPLACE batch = 200 round-trips
+    // (~47s) which is the real cause of the "318.9% cloud capacity" artifact in the 1-GW run.
+    public String getDbJdbcUrl()         { return "jdbc:mysql://" + dbHost + ":3306/" + dbName + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+                                                  + "&rewriteBatchedStatements=true&cachePrepStmts=true&useServerPrepStmts=false"; }
     public String getDbUser()            { return dbUser; }
     public String getDbPass()            { return dbPass; }
     public int    getFlushIntervalSec()  { return flushIntervalSec; }
     public String getTopologyName()      { return topologyName; }
     public List<Integer> getDerivedWindows()  { return derivedWindows; }
     public List<Integer> getGatewayWindows()  { return gatewayWindows; }
+    public boolean isForecastEnabled()        { return forecastEnabled; }
+    public boolean isCloudMergePerRow()       { return cloudMergePerRow; }
+
+    // All windows the Fog system materializes (gateway-direct + cloud-derived).
+    // Printed at startup so the run log PROVES workload parity with Monolithic.
+    public List<Integer> getAllWindows() {
+        java.util.List<Integer> all = new java.util.ArrayList<>(gatewayWindows);
+        all.addAll(derivedWindows);
+        return all;
+    }
+
+    /** One-line workload fingerprint for the startup log (prompt §2.1 parity proof). */
+    public String getWorkloadBanner() {
+        return "[WORKLOAD] windows=" + getAllWindows()
+             + " forecast=" + forecastEnabled
+             + " cloudMergeMode=" + (cloudMergePerRow ? "perrow" : "batched")
+             + " flush=" + flushIntervalSec + "s";
+    }
 
     // Alert getters
     public double getAlertDeviceMaxW()   { return alertDeviceMaxW; }

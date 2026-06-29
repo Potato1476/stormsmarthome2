@@ -25,6 +25,7 @@ public class CloudMainTopo {
     public static void main(String[] args) throws Exception {
         CloudConfig config = new CloudConfig();
         System.out.println(config);
+        System.out.println(config.getWorkloadBanner());  // parity proof in the run log (prompt §2.1)
 
         TopologyBuilder builder = new TopologyBuilder();
 

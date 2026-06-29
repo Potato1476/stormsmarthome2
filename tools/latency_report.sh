@@ -33,17 +33,26 @@ case "$MODE" in
   fog)
     DB_USER="${DB_USER:-user1}"; DB_PASS="${DB_PASS:-Uet123}"; DB_NAME="${DB_NAME:-iotdata_fog}"
     MYSQL_CONTAINER="${MYSQL_CONTAINER:-cloud-mysql}"
-    TABLE="fog_device_data"; WRITE_MS="updatedAt"; GAPCOL="sliceGap";;
+    TABLE="fog_device_data"; GAPCOL="sliceGap"
+    # LAT_KIND=first → e2e_first_write_latency (firstWrittenAt − event_ts) : COMPARABLE
+    # LAT_KIND=last  → e2e_last_write_latency  (updatedAt     − event_ts) : ARTIFACT (cumulative semantics)
+    LAT_KIND="${LAT_KIND:-first}"
+    if [[ "$LAT_KIND" == last ]]; then WRITE_MS="updatedAt"; else WRITE_MS="firstWrittenAt"; fi
+    ;;
   *) echo "MODE phải là mono hoặc fog"; exit 1;;
 esac
+LAT_KIND="${LAT_KIND:-last}"   # mono only has reg_date (last write); fog defaults to first above
 
-WHERE="event_ts > 0"
+WHERE="event_ts > 0 AND $WRITE_MS > 0"
 [[ -n "$WINDOW" ]] && WHERE="$WHERE AND $GAPCOL = $WINDOW"
 # loại bản ghi lệch đồng hồ (âm) và outlier > 1h (chỉ giữ độ trễ hợp lệ)
 SQL="SELECT ($WRITE_MS - event_ts) AS lat FROM $TABLE WHERE $WHERE HAVING lat BETWEEN 0 AND 3600000;"
 
-LABEL="${LABEL:-$MODE}"
+# Name the metric so first-write (comparable) and last-write (artifact) are never conflated.
+if [[ "$MODE" == fog ]]; then METRIC="e2e_${LAT_KIND}_write"; else METRIC="e2e_last_write"; fi
+LABEL="${LABEL:-${MODE}_${METRIC}}"
 OUT="$OUT_DIR/latency_${LABEL}_$(date +%Y%m%d-%H%M%S).csv"
+echo "[latency] metric=$METRIC (write_col=$WRITE_MS)"
 
 echo "[latency] MODE=$MODE table=$TABLE window=${WINDOW:-ALL} → query qua $SSH_TARGET ..."
 RAW=$(ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$SSH_TARGET" \

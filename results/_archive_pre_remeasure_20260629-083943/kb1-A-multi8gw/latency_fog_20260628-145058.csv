@@ -1,0 +1,10 @@
+metric,value
+mode,fog
+window,ALL
+samples,26103
+mean_ms,586614.6
+p50_ms,401040.0
+p95_ms,1351040.0
+p99_ms,1723040.0
+max_ms,1862354.0
+min_ms,216040.0

@@ -1,0 +1,6 @@
+system,scenario,role,instance_type,vCPU,RAM_MB,node_count,est_cost_usd,notes
+mono,MONO-KB1,cloud_all,TODO_EC2_TYPE,TODO,TODO,1,TODO,"toàn bộ xử lý ở cloud — điền đúng instance EC2 đang chạy mono (PHẢI cùng loại với fog cloud để parity)"
+fog,KB1-A-multi8gw,cloud_merge,TODO_EC2_TYPE,TODO,TODO,1,TODO,"cloud tier — PHẢI cùng instance EC2 với mono"
+fog,KB1-A-multi8gw,edge_gateway,docker-container,1,1024,8,0,"8 gateway container, mỗi cái limit cpus=1.0 mem=1g (docker-compose.gateway.yml)"
+fog,KB1-B-single,cloud_merge,TODO_EC2_TYPE,TODO,TODO,1,TODO,"cloud tier — cùng instance EC2 với mono"
+fog,KB1-B-single,edge_gateway,raspberry-pi-3,4,1024,1,35,"1 Pi 3 (4 core ~1.2GHz, 1GB) — đơn giá $35/node (prompt §3.2)"

@@ -23,12 +23,15 @@ set -euo pipefail
 
 CLOUD_IP="${CLOUD_IP:?Cần CLOUD_IP=<EIP fog-cloud>}"
 KEY="${KEY:?Cần KEY=~/.ssh/<key>.pem}"
-OUTAGE_SEC="${OUTAGE_SEC:-300}"
+WARMUP_SEC="${WARMUP_SEC:-900}"    # 15 phút chạy bình thường trước khi outage
+OUTAGE_SEC="${OUTAGE_SEC:-300}"    # 5 phút outage
+POST_SEC="${POST_SEC:-300}"        # 5 phút theo dõi sau recovery
 RECOVERY_TIMEOUT="${RECOVERY_TIMEOUT:-900}"
 PROM="${PROM:-http://localhost:9090}"
+GRAFANA="${GRAFANA:-http://localhost:3000}"
 SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "ec2-user@$CLOUD_IP")
 OUT_DIR="${OUT_DIR:-results}"
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR/img"
 REPORT="$OUT_DIR/kb2_offline_$(date +%Y%m%d-%H%M%S).md"
 cd "$(dirname "$0")/.."
 
@@ -44,6 +47,68 @@ except Exception:
 qint() { q "$1" | python3 -c "import sys;v=sys.stdin.read().strip();print(int(float(v)) if v not in ('NA','') else 'NA')"; }
 
 note() { echo "$*" | tee -a "$REPORT"; }
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║  KB2 — Cloud Offline Recovery (Store-and-Forward test)      ║"
+echo "║                                                              ║"
+echo "║  Timeline (~30 phút):                                        ║"
+echo "║    ~15 phút  chạy bình thường (warmup)                      ║"
+echo "║    +5 phút   cloud-mqtt OFF (giả lập outage)                ║"
+echo "║    ~1-2 phút queue xả về 0 (recovery)                       ║"
+echo "║    +5 phút   theo dõi sau recovery                           ║"
+echo "║                                                              ║"
+echo "║  ▶▶▶ ĐẢM BẢO publisher (send_all.sh) đang chạy bên kia.    ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+# ── Chờ data ổn định trước khi bắt đầu test ─────────────────────────────────
+STABLE_NEEDED=3      # 3 lần liên tiếp (15s) queue=0 + tuples tăng = ổn định
+stable_count=0
+tup_prev=0
+echo "⏳ Đang chờ data ổn định (queue=0, tuples đang tăng)..."
+while true; do
+  _q=$(qint 'sum(fog_gateway_store_queue_size)') 2>/dev/null || _q="NA"
+  _t=$(qint 'sum(fog_gateway_tuples_processed_total)') 2>/dev/null || _t="NA"
+  _pub=$(qint 'sum(fog_gateway_mqtt_published_total)') 2>/dev/null || _pub="NA"
+  if [[ "$_q" == "NA" || "$_t" == "NA" ]]; then
+    echo "  [chờ] Prometheus chưa có metrics — gateway đã chạy chưa?"
+    stable_count=0; sleep 5; continue
+  fi
+  if (( _q > 0 )); then
+    echo "  [chờ] Queue còn $_q batch — đợi drain về 0..."
+    stable_count=0; tup_prev=$_t; sleep 5; continue
+  fi
+  if (( _t <= tup_prev )); then
+    echo "  [chờ] Tuples chưa tăng ($_t) — publisher đã chạy chưa?"
+    stable_count=0; tup_prev=$_t; sleep 5; continue
+  fi
+  tup_prev=$_t
+  (( stable_count++ )) || true
+  echo "  [✓ $stable_count/$STABLE_NEEDED] queue=0, tuples=$_t, published=$_pub — ổn định..."
+  if (( stable_count >= STABLE_NEEDED )); then
+    echo ""
+    echo "✅ Data ổn định — chạy bình thường ${WARMUP_SEC}s trước khi trigger outage..."
+    echo ""
+    break
+  fi
+  sleep 5
+done
+
+# ── Warmup: chạy bình thường WARMUP_SEC giây ─────────────────────────────────
+T_WARMUP=$(date +%s)
+echo "📊 [WARMUP] Chạy bình thường trong ${WARMUP_SEC}s — theo dõi data chảy đều..."
+while (( $(date +%s) - T_WARMUP < WARMUP_SEC )); do
+  sleep 10
+  _t=$(qint 'sum(fog_gateway_tuples_processed_total)') 2>/dev/null || _t="NA"
+  _q=$(qint 'sum(fog_gateway_store_queue_size)') 2>/dev/null || _q="NA"
+  _pub=$(qint 'sum(fog_gateway_mqtt_published_total)') 2>/dev/null || _pub="NA"
+  elapsed=$(( $(date +%s) - T_WARMUP ))
+  echo "  [WARMUP ${elapsed}s/${WARMUP_SEC}s] tuples=$_t | queue=$_q | published=$_pub"
+done
+echo ""
+echo "⏱️  Warmup xong — bắt đầu outage lúc $(date '+%H:%M:%S')"
+echo ""
 
 T_TEST_START_MS=$(($(date +%s)*1000))
 note "# KB2 — Cloud Offline → Recovery ($(date '+%Y-%m-%d %H:%M:%S'))"
@@ -65,6 +130,7 @@ fi
 TUP0=$(qint 'sum(fog_gateway_tuples_processed_total)')
 
 # ── Tắt cloud-mqtt ───────────────────────────────────────────────────────────
+echo "🔴 Tắt cloud-mqtt (giả lập outage ${OUTAGE_SEC}s)..."
 "${SSH[@]}" "docker stop cloud-mqtt >/dev/null"
 T_OFF=$(date +%s)
 note ""
@@ -75,11 +141,12 @@ while (( $(date +%s) - T_OFF < OUTAGE_SEC )); do
   sleep 5
   cq=$(qint 'sum(fog_gateway_store_queue_size)'); [[ "$cq" == "NA" ]] && cq=0
   (( cq > MAX_Q )) && MAX_Q=$cq
-  printf '\r  queue hiện tại: %-8s max: %-8s (%ss/%ss)' "$cq" "$MAX_Q" "$(( $(date +%s) - T_OFF ))" "$OUTAGE_SEC"
+  echo "  [OUTAGE] queue: $cq batch (max: $MAX_Q) | $(( $(date +%s) - T_OFF ))s / ${OUTAGE_SEC}s"
 done
-echo ""
 
 # ── Bật lại cloud-mqtt ───────────────────────────────────────────────────────
+echo ""
+echo "🟢 Bật lại cloud-mqtt lúc $(date '+%H:%M:%S') — chờ queue xả về 0..."
 "${SSH[@]}" "docker start cloud-mqtt >/dev/null"
 T_ON=$(date +%s)
 note "## Cloud MQTT ON lại lúc $(date '+%H:%M:%S') — chờ queue xả về 0..."
@@ -89,8 +156,20 @@ while (( $(date +%s) - T_ON < RECOVERY_TIMEOUT )); do
   sleep 5
   cq=$(qint 'sum(fog_gateway_store_queue_size)'); [[ "$cq" == "NA" ]] && cq=0
   (( cq > MAX_Q )) && MAX_Q=$cq
-  printf '\r  queue hiện tại: %-8s (%ss sau khi bật lại)' "$cq" "$(( $(date +%s) - T_ON ))"
+  echo "  [RECOVERY] queue: $cq batch | $(( $(date +%s) - T_ON ))s sau khi bật lại"
   if (( cq == 0 )); then RECOVERY=$(( $(date +%s) - T_ON )); break; fi
+done
+echo ""
+
+# ── Post-recovery: theo dõi thêm POST_SEC giây ───────────────────────────────
+echo "📊 [POST-RECOVERY] Theo dõi thêm ${POST_SEC}s để xác nhận hệ thống ổn định..."
+T_POST=$(date +%s)
+while (( $(date +%s) - T_POST < POST_SEC )); do
+  sleep 10
+  _t=$(qint 'sum(fog_gateway_tuples_processed_total)') 2>/dev/null || _t="NA"
+  _q=$(qint 'sum(fog_gateway_store_queue_size)') 2>/dev/null || _q="NA"
+  elapsed=$(( $(date +%s) - T_POST ))
+  echo "  [POST ${elapsed}s/${POST_SEC}s] tuples=$_t | queue=$_q"
 done
 echo ""
 
@@ -132,4 +211,21 @@ $PASS && note "✅ PASS: Store-and-Forward hoạt động đúng khi có lỗi m
 
 note ""
 note "Báo cáo này (số chuẩn): $REPORT"
-note "Ảnh minh hoạ: tự chụp panel 'Store-and-Forward Queue Depth' trên Grafana (đường tăng→về 0)."
+note "Ảnh minh hoạ: panel 'Store-and-Forward Queue Depth' trên Grafana (đường tăng→về 0)."
+
+T_END_MS=$(($(date +%s)*1000))
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo " ✅ XONG KB2 — KẾT QUẢ:"
+echo "    Max Queue Depth : $MAX_Q batch"
+echo "    Recovery Time   : ${RECOVERY}s"
+echo "    Data Loss       : ${LOSS_PCT}%"
+echo "────────────────────────────────────────────────────────────────"
+echo " 📁 Số chuẩn: $REPORT"
+echo ""
+echo " 📸 GIỜ VÀO CHỤP ẢNH Grafana:"
+echo "    $GRAFANA/d/fog-vs-mono-001/fog?from=${T_TEST_START_MS}&to=${T_END_MS}&tz=Asia%2FHo_Chi_Minh"
+echo "    (login admin/admin — URL đã ghim đúng khoảng thời gian phiên này)"
+echo "    Panel cần chụp: 'Store-and-Forward Queue Depth' (đường tăng rồi về 0)"
+echo "    👉 LƯU ẢNH VÀO: $OUT_DIR/img/"
+echo "════════════════════════════════════════════════════════════════"

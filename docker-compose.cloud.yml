@@ -129,6 +129,9 @@ services:
       DB_PASS: ${MYSQL_PASSWORD:-Uet123}
       FLUSH_INTERVAL_SEC: ${FLUSH_INTERVAL_SEC:-60}
       TOPOLOGY_NAME: fog-cloud
+      # ─ Workload parity + control knobs (prompt §2.1 / §6.3) ──────────────
+      FORECAST_ENABLED: ${FORECAST_ENABLED:-true}    # parity với Bolt_forecast của Mono
+      CLOUDMERGE_MODE:  ${CLOUDMERGE_MODE:-batched}  # batched (mặc định) | perrow (đo so sánh 318,9%)
       # ─ Alert thresholds (truyền vào Bolt_cloudMerge) ─────────────────────
       ALERT_DEVICE_MAX_W:  ${ALERT_DEVICE_MAX_W:-2000}
       ALERT_HOUSE_MAX_W:   ${ALERT_HOUSE_MAX_W:-20000}
