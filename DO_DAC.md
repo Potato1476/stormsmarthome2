@@ -132,7 +132,10 @@ python3 tools/anomaly_score.py results/remeasure/anomaly_gt.json results/remeasu
 
 ## Độ trễ — ĐO TÁCH BẠCH 3 LOẠI (B6, prompt §2.2)
 Ba đại lượng KHÁC bản chất — **không bao giờ trộn** trong một bảng:
-1. **`storm_complete_latency`** (so sánh HỢP LỆ) — đã nằm trong cột `lat_*` của summary (acker-based).
+> ⚠️ Topology (cả mono lẫn fog) phát tuple **unanchored** ⇒ `storm_complete_latency` acker-based = 0.
+> Vì vậy cột `lat_*_ms` trong summary là **`bolts_execute_latency`** (độ trễ xử lý/tuple của bolt
+> nghẽn nhất — đối xứng hai hệ), và độ trễ **so sánh chính** giữa hai kiến trúc là `e2e_first_write` (DB).
+1. **`bolts_execute_latency`** (cột `lat_*` của summary) — độ trễ xử lý/tuple, đối xứng hai hệ.
 2. **`e2e_first_write`** (so sánh HỢP LỆ) — `firstWrittenAt − event_ts`, lần ghi DB ĐẦU:
    ```bash
    MODE=fog LAT_KIND=first SSH_TARGET=ec2-user@$CLOUD_IP KEY=~/.ssh/storm.pem ./tools/latency_report.sh

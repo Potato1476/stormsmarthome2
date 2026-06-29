@@ -1,6 +1,0 @@
-houses,msg_per_s,cloud_complete_latency_ms,cloud_capacity_max,gw_capacity_max,gw_exec_latency_ms,gw_flush_latency_ms,gw_cpu_busiest_avg_pct,gw_ram_busiest_avg_mb,tuples_processed,wan_kb_per_min,oom_killed
-1,10,3.5,0.353,0.0004,0.0447,927.5451,10.9,186,2410,14.0,0
-5,50,3.5,0.212,0.0014,0.0232,661.1754,10.2,194,14390,41.8,0
-10,100,8728.5,0,0.0019,0.0488,967.9372,13.1,211,39223,88.8,0
-20,200,46123.333,0,0.008,0.048,1061.0413,14.9,250,90652,164.5,0
-40,400,93387,3.189,0.0095,0.0304,759.2303,11.2,288,173223,396.1,0

@@ -1,8 +1,0 @@
-Theo dõi container gw-* mỗi 10s trong 60s → results/kb1-B-single/sim_stats_sim-B-single-h40.csv
-15:48:01  gw=115:48:13  gw=115:48:25  gw=115:48:36  gw=115:48:48  gw=115:49:00  gw=1
-  Số gateway     : 1
-  CPU/1 gw bận nhất : trung bình 11.2%  | đỉnh 17.9%  (≈100% = bão hoà 1 vCPU)
-  RAM/1 gw bận nhất : trung bình 288 MB | đỉnh 288 MB
-  RAM tổng 1 gw    : trung bình 288 MB | đỉnh 288 MB
-  → điền bảng: CPU=11%  RAM=288MB (mỗi thiết bị biên)
-CSV: results/kb1-B-single/sim_stats_sim-B-single-h40.csv
