@@ -1,51 +1,54 @@
-# Fog Computing Smart Home IoT — Apache Storm
+# Fog Computing Smart Home IoT (FOG v2) — Apache Storm
 
-Hệ thống xử lý dữ liệu IoT nhà thông minh theo mô hình **Fog Computing 2 tầng**,
-dùng **nguyên topology gốc** (`Spout_data → Bolt_split → Bolt_avg → Bolt_sum →
-Bolt_forecast`) và **chia tải bằng TagAwareScheduler** — một Storm cluster duy
-nhất trải trên 2 máy, bolt nào gắn `tags=cloud` thì chạy ở Cloud, còn lại chạy
-ở Gateway. Không bolt nào bị sửa hay gộp.
-
-- **Gateway (Edge, ~Raspberry Pi 3)** — việc nhẹ: nhận dữ liệu thô từ broker
-  MQTT local, `split-*` + `avg-*`, phát **cảnh báo thiết bị tức thì** cho hộ
-  gia đình qua broker local (không phụ thuộc WAN).
-- **Cloud (AWS EC2)** — việc nặng: `sum-*` (tổng hợp house/household),
-  `forecast-*` (dự báo, query DB), MySQL, Storm Nimbus/UI/exporter.
+Hệ thống xử lý dữ liệu IoT nhà thông minh theo mô hình **Fog Computing v2 (2 tầng phân tán)**:
+- **Tầng Gateway (Edge / Local - Raspberry Pi 3)**:
+  - Nhận dữ liệu điện năng raw từ Publisher cục bộ qua broker MQTT local.
+  - Tích hợp bộ phát hiện bất thường **EWMA z-score + hard-ceiling** ngay tại biên và bắn cảnh báo trực tiếp ra **Slack** từng hộ gia đình (tính năng thời gian thực độc lập, không phụ thuộc WAN).
+  - Tích hợp cơ chế **Store-and-Forward queue** (lưu trữ SQLite local) giúp lưu trữ và truyền lại toàn vẹn dữ liệu khi mạng Cloud mất kết nối (Outage Recovery).
+  - Tích lũy (aggregate) dữ liệu theo chu kỳ 60s và chuyển tiếp lên Cloud.
+- **Tầng Cloud (AWS EC2)**:
+  - Broker MQTT nhận dữ liệu aggregated từ các Gateway.
+  - Storm topology `fog-cloud` (`Spout_aggregated` + `Bolt_cloudMerge`) gộp dữ liệu các Gateway và ghi trực tiếp vào MySQL database (`cloud-mysql`) với cơ chế **JDBC batch-transaction**.
+  - Dịch vụ API `iot-data-api` chạy Web Dashboard trên cổng 9000 phục vụ hiển thị dữ liệu thời gian thực và so sánh baseline dự báo.
 
 ```
-[Publisher] ─MQTT─▶ mqtt-broker ─▶ supervisor1 (GW, untagged)     ─Storm/WAN─▶ supervisor2 (tags=cloud)
-                    (local, raw)    spout, split-*, avg-*                       sum-*, forecast-* → MySQL
-                         ▲                │                                     (+ nimbus, ZK, exporter)
-              cảnh báo tức thì ◀──────────┘
-              cho hộ gia đình
+[Publisher] ──MQTT──▶ [Local MQTT] ──▶ [fog-gateway] ──(Slack API)──▶ Slack Alert 🚨
+                         (raw)       - Anomaly EWMA z-score
+                                     - Aggregation (60s)
+                                     - Store-Forward Queue
+                                              │
+                                             WAN
+                                        (aggregated)
+                                              ▼
+                                       [Cloud MQTT]
+                                              │
+                                              ▼
+                                         [fog-cloud] (Storm Topology on EC2)
+                                              │
+                                              ▼
+                                        [Cloud MySQL] ◀── [iot-data-api (Port 9000)]
 ```
 
-## Tài liệu
+---
 
-| File | Nội dung |
-|---|---|
-| **[demo.sh](demo.sh)** | 🚀 **Kịch bản chạy thử & Demo nhanh** (Khuyên dùng khi thuyết trình: Bật/tắt Cloud, Gateway local, bắn data, chạy kịch bản thử nghiệm). |
-| **[PROMPTS.md](PROMPTS.md)** | ⭐ Prompt sẵn-dán vào Claude Code (VS Code): mỗi kịch bản 1 ô, Claude tự dựng + đo + xuất ảnh, bạn chỉ bắn data ở `iot-data-publisher` |
-| **[KICH_BAN_THI_NGHIEM.md](KICH_BAN_THI_NGHIEM.md)** | Chi tiết kịch bản + cách đọc số liệu: scalability ramp, Cloud Offline→Recovery, 2 môi trường giả lập (8 gateway phân tán vs 1 gateway) |
-| **[HUONG_DAN_CHAY.md](HUONG_DAN_CHAY.md)** | Hướng dẫn vận hành chi tiết bằng lệnh thủ công cho từng tầng. |
-| **[PHAN_CHIA_BOLT.md](PHAN_CHIA_BOLT.md)** | Bolt nào ở gateway / cloud, lý do, cách tinh chỉnh tag (`--cloudbolts`) |
-| **[RUNBOOK_FOG_V1.md](RUNBOOK_FOG_V1.md)** | Triển khai 2 EC2, nộp topology, đo lường, test mất mạng |
-| **[PI3_KHA_THI.md](PI3_KHA_THI.md)** | Phân tích + kịch bản đo trên Raspberry Pi 3 thật |
-| [KICH_BAN_DO_LUONG.md](KICH_BAN_DO_LUONG.md) | Kịch bản so sánh với Monolithic |
+## 📂 Cấu trúc thư mục chính
 
-## Thành phần chính
+| Thư mục / File | Vai trò |
+|----------------|---------|
+| [fog-gateway/](file:///Users/nguyenbao/stormsmarthome2/fog-gateway) | Mã nguồn Java của Gateway biên, bao gồm mosquitto MQTT local, SQLite queue và Dockerfile build gateway. |
+| [fog-cloud/](file:///Users/nguyenbao/stormsmarthome2/fog-cloud) | Mã nguồn Java của Cloud topology (`Spout_aggregated` & `Bolt_cloudMerge`) và Dockerfile cho Storm. |
+| [cloud/webapp/](file:///Users/nguyenbao/stormsmarthome2/cloud/webapp) | API Node.js và giao diện Web Dashboard (`iot-data-api`) chạy ở cổng 9000 trên Cloud. |
+| [fog-monitoring/](file:///Users/nguyenbao/stormsmarthome2/fog-monitoring) | Cấu hình Prometheus + Grafana cục bộ để giám sát hiệu năng các Gateway và Cloud. |
+| [infrastructure/](file:///Users/nguyenbao/stormsmarthome2/infrastructure) | Mã nguồn Terraform dựng hạ tầng AWS EC2 cho Cloud (t3.large) + kịch bản script set IP/khởi chạy. |
+| [tools/](file:///Users/nguyenbao/stormsmarthome2/tools) | Các script phục vụ tự động hóa đo đạc, tạo manifesto, tổng hợp dữ liệu và sinh báo cáo trễ. |
+| [demo.sh](file:///Users/nguyenbao/stormsmarthome2/demo.sh) | Script Menu tương tác giúp điều khiển & demo toàn bộ hệ thống local nhanh chóng. |
+| [run_alerts_test.sh](file:///Users/nguyenbao/stormsmarthome2/run_alerts_test.sh) | Script kiểm tra nhanh tính năng anomaly detection và gửi webhook alert ra Slack. |
 
-| Thành phần | Vai trò |
-|------------|---------|
-| `gateway/` | **Code topology gốc của thầy** + TagAwareScheduler + compose tầng Gateway |
-| `cloud/` | Compose tầng Cloud (ZK, Nimbus+scheduler, supervisor2 `tags=cloud`, MySQL, exporter) |
-| `tools/test_offline_queue.sh` | **Cơ chế kiểm tra hàng đợi khi mất mạng** (cắt mạng có kiểm soát → đo cảnh báo local + toàn vẹn dữ liệu) |
-| `infrastructure/` | Terraform: 2 EC2 (gateway t3.small + cloud t3.large), EIP tĩnh, SG mở port Storm giữa 2 máy |
-| `monitoring/` | Prometheus + Grafana (chạy local, scrape exporter Cloud) |
-| `fog-gateway/`, `fog-cloud/` | Kiến trúc v2 cũ (gateway tự tổng hợp, gửi MQTT + hàng đợi store-and-forward) — giữ lại để tham khảo/so sánh |
+---
 
-## Thay đổi so với code gốc
+## 📄 Tài liệu Hướng dẫn
 
-Đúng một chỗ: `MainTopo.java` nhận option `-c/--cloudbolts` (mặc định
-`sum,forecast` — y hệt hard-code cũ) để thử các phương án phân chia bolt mà
-không cần rebuild. Toàn bộ phần còn lại là cấu hình triển khai.
+- **[DO_DAC.md](file:///Users/nguyenbao/stormsmarthome2/DO_DAC.md)**: Hướng dẫn quy trình đo đạc nghiêm ngặt (chạy các kịch bản KB1a, KB1b, KB2a, KB2b, đánh giá Anomaly và đo đạc Latency tách biệt).
+- **[docs/REMEASURE_PLAN.md](file:///Users/nguyenbao/stormsmarthome2/docs/REMEASURE_PLAN.md)**: Kế hoạch và lý do thực hiện đo lại hệ thống.
+- **[docs/METRICS_EXPLANATION.md](file:///Users/nguyenbao/stormsmarthome2/docs/METRICS_EXPLANATION.md)**: Giải thích chi tiết các chỉ số đo lường hiệu năng (Latency, Throughput, Capacity, Outage Queue).
+- **[PROMPTS.md](file:///Users/nguyenbao/stormsmarthome2/PROMPTS.md)**: Các prompt hướng dẫn đo đạc và tự động thu thập số liệu.
